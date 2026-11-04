@@ -4,7 +4,7 @@ import secrets
 import os
 import time
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, Request, Query
 from pydantic import BaseModel, Field
@@ -31,53 +31,54 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
         app.state.settings = current
         if current.notifications.enabled and not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
             raise RuntimeError("notifications.enabled requiere TELEGRAM_BOT_TOKEN en el entorno local")
-        try:
-            pose_model = estimator if estimator is not None else load_pose_estimator(current)
-            vision_model = vision if vision is not None else load_vision_model(current)
-        except (ModelLoadError, NotImplementedError) as error:
-            raise RuntimeError(f"No se pudo iniciar VisionPsy-Local: {error}") from error
-        repository = Repository(current.storage.path)
-        document = repository.zones()
-        if document.revision == 0 and current.risk.safe_zones:
-            document = repository.replace_zones(ZonesDocument(zones=[
-                Zone(id=f"zone-{i}", name=f"Zona {i+1}", polygon=p) for i,p in enumerate(current.risk.safe_zones)]))
-        if document.revision:
-            current = current.model_copy(update={"risk":current.risk.model_copy(update={"safe_zones":[z.polygon for z in document.zones]})})
-            app.state.settings = current
-        manager = ConnectionManager(current.server.send_timeout_seconds)
-        pipeline = Pipeline(current, pose_model, vision_model, manager, clock, repository=repository)
-        app.state.manager, app.state.pipeline = manager, pipeline
-        app.state.repository = repository
-        worker = NotificationWorker(repository, pipeline, current.notifications, clock=clock)
-        app.state.notifier = worker
-        notification_task = None
-        if current.notifications.enabled:
-            notification_task = asyncio.create_task(worker.run())
+        async with AsyncExitStack() as resources:
+            try:
+                pose_model = estimator if estimator is not None else load_pose_estimator(current)
+                close_estimator = getattr(pose_model, "close", None)
+                if close_estimator is not None:
+                    resources.push_async_callback(asyncio.to_thread, close_estimator)
+                vision_model = vision if vision is not None else load_vision_model(current)
+            except (ModelLoadError, NotImplementedError) as error:
+                raise RuntimeError(f"No se pudo iniciar VisionPsy-Local: {error}") from error
+            repository = Repository(current.storage.path)
+            resources.callback(repository.close)
+            document = repository.zones()
+            if document.revision == 0 and current.risk.safe_zones:
+                document = repository.replace_zones(ZonesDocument(zones=[
+                    Zone(id=f"zone-{i}", name=f"Zona {i+1}", polygon=p) for i,p in enumerate(current.risk.safe_zones)]))
+            if document.revision:
+                current = current.model_copy(update={"risk":current.risk.model_copy(update={"safe_zones":[z.polygon for z in document.zones]})})
+                app.state.settings = current
+            manager = ConnectionManager(current.server.send_timeout_seconds)
+            pipeline = Pipeline(current, pose_model, vision_model, manager, clock, repository=repository)
+            app.state.manager, app.state.pipeline = manager, pipeline
+            app.state.repository = repository
+            worker = NotificationWorker(repository, pipeline, current.notifications, clock=clock)
+            app.state.notifier = worker
+            notification_task = None
+            if current.notifications.enabled:
+                notification_task = asyncio.create_task(worker.run())
 
-        async def ticker():
-            maintenance_at = clock()
-            while True:
-                await asyncio.sleep(current.server.tick_seconds)
-                await pipeline.tick()
-                if clock() - maintenance_at >= 60:
-                    await pipeline.alerts.prune(clock(), current.storage.retention_days)
-                    await pipeline.technical.prune(clock(), current.storage.retention_days)
-                    maintenance_at = clock()
+            async def ticker():
+                maintenance_at = clock()
+                while True:
+                    await asyncio.sleep(current.server.tick_seconds)
+                    await pipeline.tick()
+                    if clock() - maintenance_at >= 60:
+                        await pipeline.alerts.prune(clock(), current.storage.retention_days)
+                        await pipeline.technical.prune(clock(), current.storage.retention_days)
+                        maintenance_at = clock()
 
-        task = asyncio.create_task(ticker())
-        try:
-            yield
-        finally:
-            task.cancel()
-            if notification_task:
-                notification_task.cancel()
-                await asyncio.gather(notification_task, return_exceptions=True)
-            await asyncio.gather(task, return_exceptions=True)
-            await pipeline.close()
-            close_estimator = getattr(pose_model, "close", None)
-            if close_estimator is not None:
-                await asyncio.to_thread(close_estimator)
-            repository.close()
+            task = asyncio.create_task(ticker())
+            try:
+                yield
+            finally:
+                task.cancel()
+                if notification_task:
+                    notification_task.cancel()
+                    await asyncio.gather(notification_task, return_exceptions=True)
+                await asyncio.gather(task, return_exceptions=True)
+                await pipeline.close()
 
     app = FastAPI(title="VisionPsy-Local", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     async def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):

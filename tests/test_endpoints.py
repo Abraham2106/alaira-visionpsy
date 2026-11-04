@@ -183,3 +183,38 @@ def test_missing_telegram_secret_fails_before_allocating_models_or_database(sett
         with TestClient(create_app(config)):
             pass
     assert not path.exists()
+
+
+@pytest.mark.parametrize("failure", ["vision", "zones", "none"])
+def test_pose_is_closed_on_partial_startup_and_normal_shutdown(settings,monkeypatch,failure):
+    from backend.storage import Repository
+    from backend.model_loader import ModelLoadError
+    class PoseModel(StubPoseEstimator):
+        closed=0
+        def close(self):
+            self.closed+=1
+    pose=PoseModel()
+    closed_repositories=[]
+    original_close=Repository.close
+    def close_repository(self):
+        closed_repositories.append(self)
+        original_close(self)
+    monkeypatch.setattr(Repository,"close",close_repository)
+    def fail_vision(_):
+        raise ModelLoadError("synthetic vision startup failure")
+    def fail_zones(_):
+        raise RuntimeError("synthetic zone startup failure")
+    if failure=="vision":
+        monkeypatch.setattr("backend.main.load_vision_model",fail_vision)
+    elif failure=="zones":
+        monkeypatch.setattr(Repository,"zones",fail_zones)
+    if failure=="none":
+        with TestClient(create_app(settings,estimator=pose)) as client:
+            assert client.get("/health",headers=auth(settings)).status_code==200
+            assert pose.closed==0
+    else:
+        with pytest.raises(RuntimeError,match="startup failure"):
+            with TestClient(create_app(settings,estimator=pose)):
+                pass
+    assert pose.closed==1
+    assert len(closed_repositories)==(0 if failure=="vision" else 1)
