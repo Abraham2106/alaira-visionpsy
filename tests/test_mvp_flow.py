@@ -53,3 +53,37 @@ def test_paired_camera_event_delivery_attention_and_restart(settings,tmp_path,jp
         assert client.get(f"/alerts/{saved_id}/actions",headers=headers).json()[0]["action"]=="attend"
         notices=client.get("/notifications",headers=headers).json()["deliveries"]
         assert any(d["event_id"]==saved_id and d["status"]=="sent" for d in notices)
+
+
+def test_zone_change_resets_evidence_without_claiming_human_attention(settings,jpeg):
+    now=[0.0]
+    config=settings.model_copy(update={"risk":RiskConfig(immobile_seconds=.4)})
+    headers={"Authorization":"Bearer " + config.token}
+    app=create_app(config,estimator=StubPoseEstimator("fall"),clock=lambda:now[0])
+    with TestClient(app) as client:
+        pipeline=app.state.pipeline
+        for i in range(6):
+            now[0]=i*.2
+            client.portal.call(pipeline.process,jpeg)
+        original=client.get("/alerts",headers=headers).json()[0]
+        assert original["state"]=="OPEN"
+        zone={"revision":0,"zones":[{"id":"bed","name":"Cama","kind":"bed","polygon":[[.4,.6],[.9,.6],[.9,.95],[.4,.95]]}]}
+        assert client.put("/zones",headers=headers,json=zone).status_code==200
+        assert len(pipeline.history)==0 and pipeline.alerts.ok_since is None
+        saved=client.get("/alerts",headers=headers).json()[0]
+        assert saved["id"]==original["id"] and saved["attention"]=="pending" and saved["state"]=="OPEN"
+        # Cerrar explícitamente antes de comprobar que la zona suprime un nuevo evento.
+        client.post(f"/alerts/{original['id']}/action",headers=headers,json={"action":"close"})
+        for i in range(6,12):
+            now[0]=i*.2
+            client.portal.call(pipeline.process,jpeg)
+        assert pipeline.last_status.reasons==["safe_zone"]
+        assert pipeline.alerts.active_id is None
+        assert client.put("/zones",headers=headers,json={"revision":1,"zones":[]}).status_code==200
+        now[0]=2.4
+        client.portal.call(pipeline.process,jpeg)
+        assert pipeline.last_status.level=="suspect" and pipeline.alerts.active_id is None
+        for timestamp in (2.6,2.8,3.0):
+            now[0]=timestamp
+            client.portal.call(pipeline.process,jpeg)
+        assert pipeline.alerts.active_id not in {None,original["id"]}

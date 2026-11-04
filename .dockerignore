@@ -9,3 +9,5 @@ llama.cpp
 certs
 .git
 reports
+data
+**/.venv311

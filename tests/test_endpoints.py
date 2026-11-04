@@ -168,3 +168,18 @@ def test_disconnect_during_authentication_does_not_close_twice(settings, excepti
         async def close(self, **kwargs):
             raise AssertionError("No debe cerrar de nuevo un socket desconectado")
     assert asyncio.run(authenticate_socket(ClosedSocket(), settings)) is False
+
+
+def test_missing_telegram_secret_fails_before_allocating_models_or_database(settings,monkeypatch,tmp_path):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN",raising=False)
+    def unexpected_model_load(_):
+        raise AssertionError("No cargar modelos con configuración incompleta")
+    monkeypatch.setattr("backend.main.load_pose_estimator",unexpected_model_load)
+    path=tmp_path/"unused.sqlite3"
+    config=settings.model_copy(update={
+        "notifications":settings.notifications.model_copy(update={"enabled":True}),
+        "storage":settings.storage.model_copy(update={"path":str(path)})})
+    with pytest.raises(RuntimeError,match="TELEGRAM_BOT_TOKEN"):
+        with TestClient(create_app(config)):
+            pass
+    assert not path.exists()

@@ -29,6 +29,8 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
     async def lifespan(app: FastAPI):
         current = settings
         app.state.settings = current
+        if current.notifications.enabled and not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
+            raise RuntimeError("notifications.enabled requiere TELEGRAM_BOT_TOKEN en el entorno local")
         try:
             pose_model = estimator if estimator is not None else load_pose_estimator(current)
             vision_model = vision if vision is not None else load_vision_model(current)
@@ -50,9 +52,6 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
         app.state.notifier = worker
         notification_task = None
         if current.notifications.enabled:
-            if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
-                repository.close()
-                raise RuntimeError("notifications.enabled requiere TELEGRAM_BOT_TOKEN en el entorno local")
             notification_task = asyncio.create_task(worker.run())
 
         async def ticker():
