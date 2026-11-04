@@ -61,7 +61,7 @@ function startCapture(video: HTMLVideoElement, canvas: HTMLCanvasElement, mode: 
       encoding = true;
       canvas.toBlob((blob) => {
         encoding = false;
-        if (!stopped && blob && send(blob)) onFrame();
+        if (!stopped && !document.hidden && blob && send(blob)) onFrame();
       }, "image/jpeg", CAPTURE.quality);
     }, 1000 / CAPTURE.fps);
   }
