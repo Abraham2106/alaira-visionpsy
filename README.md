@@ -72,4 +72,26 @@ npm --prefix frontend run build
 
 Las pruebas de reglas y del bot usan datos/proveedores sintéticos: no prueban precisión clínica ni recepción en un celular real. MediaPipe real y WSS se comprobaron por separado en una sesión local de dos minutos. Queda pendiente la aceptación física del teléfono, red y cuenta Telegram.
 
-El análisis visual complementario VisionPsy-Nano está pospuesto: en una prueba local con el servidor oficial y una imagen sintética, las consultas CPU tardaron 45–48 segundos, por encima del plazo de 15 segundos del MVP. El backend visual predeterminado devuelve una respuesta marcada como sintética y no decide ni cancela alertas. No confundirlo con MediaPipe, que sí ejecuta inferencia real en `--mode real`.
+### VisionPsy-Nano Flash (opcional)
+
+Añade una descripción visual al evento mediante el fork local de llama.cpp de QVAC. El riesgo y las alertas siguen dependiendo de MediaPipe y las reglas. El backend predeterminado `stub` devuelve texto marcado como sintético.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-visionpsy.txt -r requirements-visionpsy-download.txt
+.\.venv\Scripts\python.exe scripts/download_visionpsy.py
+.\scripts\build_visionpsy_server.ps1
+```
+
+El build Windows requiere Visual Studio 2022 Community con MSVC 14.44.35207, CMake/Ninja y CUDA Toolkit 13.1.2 en `models/visionpsy-nano-flash/cuda-13.1.2/` (prefijo local de micromamba, paquete `cuda-toolkit=13.1.2`, canal `nvidia/label/cuda-13.1.2`). Compila para GPU NVIDIA con capacidad 8.6; otras GPU requieren ajustar el script. Fuente y pesos tienen revisiones fijas y se guardan fuera de Git.
+
+En `backend/config.yaml`, configura `models.vision` y reinicia:
+
+```yaml
+  vision:
+    backend: visionpsy
+    gguf_path: ../models/visionpsy-nano-flash/visionpsy-nano-460m-flash-q4_k_m-imat.gguf
+    runtime_library_dirs: [../models/visionpsy-nano-flash/cuda-13.1.2/Library/bin]
+    timeout_seconds: 15
+```
+
+El proyector y ejecutable tienen rutas predeterminadas en ese mismo directorio; se pueden cambiar con `mmproj_path` y `executable`. El servidor se carga una vez, escucha en loopback con clave efímera y admite una consulta a la vez, sin guardar imágenes. Un error o timeout deja la alerta vigente. La prueba del agente con una ilustración sintética registró 0.53 s en RTX 2050; la prueba CPU anterior tardó 45–48 s. Son pruebas técnicas pequeñas, sin demostrar precisión para caídas ni utilidad clínica; el español observado fue deficiente.

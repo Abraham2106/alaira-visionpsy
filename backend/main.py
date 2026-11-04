@@ -38,6 +38,12 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
                 if close_estimator is not None:
                     resources.push_async_callback(asyncio.to_thread, close_estimator)
                 vision_model = vision if vision is not None else load_vision_model(current)
+                close_vision = getattr(vision_model, "aclose", None)
+                if close_vision is not None:
+                    resources.push_async_callback(close_vision)
+                start_vision = getattr(vision_model, "start", None)
+                if start_vision is not None:
+                    await start_vision()
             except (ModelLoadError, NotImplementedError) as error:
                 raise RuntimeError(f"No se pudo iniciar VisionPsy-Local: {error}") from error
             repository = Repository(current.storage.path)

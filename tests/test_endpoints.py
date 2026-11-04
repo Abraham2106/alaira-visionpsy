@@ -218,3 +218,31 @@ def test_pose_is_closed_on_partial_startup_and_normal_shutdown(settings,monkeypa
                 pass
     assert pose.closed==1
     assert len(closed_repositories)==(0 if failure=="vision" else 1)
+
+
+@pytest.mark.parametrize("failure", ["start", "zones", "none"])
+def test_async_vision_lifecycle_cleans_up_even_on_startup_failure(settings, monkeypatch, failure):
+    from backend.storage import Repository
+    from backend.model_loader import StubVisionModel
+    calls = []
+    class Vision(StubVisionModel):
+        async def start(self):
+            calls.append("start")
+            if failure == "start":
+                raise RuntimeError("synthetic startup failure")
+        async def aclose(self):
+            calls.append("close")
+    if failure == "zones":
+        def fail_zones(_):
+            raise RuntimeError("synthetic startup failure")
+        monkeypatch.setattr(Repository, "zones", fail_zones)
+    app = create_app(settings, vision=Vision())
+    if failure == "none":
+        with TestClient(app) as client:
+            assert client.get("/health", headers=auth(settings)).status_code == 200
+            assert calls == ["start"]
+    else:
+        with pytest.raises(RuntimeError, match="startup failure"):
+            with TestClient(app):
+                pass
+    assert calls == ["start", "close"]

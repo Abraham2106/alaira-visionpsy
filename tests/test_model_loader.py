@@ -57,13 +57,16 @@ def test_unknown_backend_is_actionable(settings, kind):
 
 def test_settings_require_token_and_resolve_relative_weights(monkeypatch, tmp_path):
     config = tmp_path / "config.yaml"
-    config.write_text("# Configuración de prueba\nmodels:\n  vision:\n    gguf_path: model.gguf\n", encoding="utf-8")
+    config.write_text("models:\n  vision:\n    gguf_path: model.gguf\n    mmproj_path: projector.gguf\n    executable: llama-server.exe\n    runtime_library_dirs: [cuda/bin]\n", encoding="utf-8")
     monkeypatch.setenv("APP_TOKEN", "")
     with pytest.raises(ValueError):
         load_settings(config)
     monkeypatch.setenv("APP_TOKEN", "synthetic-test-token")
     settings = load_settings(config)
     assert settings.models.vision.gguf_path == str(tmp_path / "model.gguf")
+    assert settings.models.vision.mmproj_path == str(tmp_path / "projector.gguf")
+    assert settings.models.vision.executable == str(tmp_path / "llama-server.exe")
+    assert settings.models.vision.runtime_library_dirs == [str(tmp_path / "cuda" / "bin")]
     assert settings.models.pose.model_path == str((tmp_path.parent / "models" / "pose_landmarker_lite.task").resolve())
     assert "synthetic-test-token" not in repr(settings)
 
@@ -83,3 +86,17 @@ def test_settings_can_select_local_mediapipe_and_port(monkeypatch, tmp_path):
 def test_public_bind_and_wildcard_cors_are_rejected(settings, server):
     with pytest.raises(ValueError):
         Settings(token=settings.token, server=server)
+
+
+def test_visionpsy_registry_passes_configuration(settings, monkeypatch):
+    pytest.importorskip("PIL")
+    captured = {}
+    def construct(**kwargs):
+        captured.update(kwargs)
+        return "adapter"
+    monkeypatch.setattr("backend.visionpsy.VisionPsyModel", construct)
+    raw = settings.model_dump()
+    raw["models"]["vision"].update(backend="visionpsy", executable="local-server", port=8099, gpu_layers=0)
+    assert load_vision_model(Settings(**raw)) == "adapter"
+    assert captured["executable"] == "local-server" and captured["port"] == 8099
+    assert captured["gpu_layers"] == 0 and captured["max_image_bytes"] == settings.server.max_frame_bytes

@@ -109,7 +109,7 @@ def main():
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0))
         ready=False
         request=Request(url+"/api/health",headers={"Authorization":f"Bearer {settings.token}"})
-        deadline=time.monotonic()+45
+        deadline=time.monotonic()+max(45,settings.models.vision.startup_timeout_seconds+15)
         while time.monotonic()<deadline:
             if any(child.poll() is not None for child in children):
                 raise RuntimeError("Un servicio no pudo arrancar; revisa reports/local-backend.log y local-frontend.log")

@@ -128,9 +128,28 @@ def _qvac(settings: Settings) -> VisionModel:
     raise NotImplementedError("QVAC SDK pendiente: conecta VisionModel en model_loader.py")
 
 
+def _visionpsy(settings: Settings) -> VisionModel:
+    try:
+        from .visionpsy import VisionPsyModel
+        config = settings.models.vision
+        return VisionPsyModel(
+            executable=config.executable, model_path=config.gguf_path,
+            mmproj_path=config.mmproj_path, runtime_library_dirs=tuple(config.runtime_library_dirs),
+            port=config.port, gpu_layers=config.gpu_layers, max_tokens=config.max_tokens,
+            timeout_seconds=config.timeout_seconds, startup_timeout_seconds=config.startup_timeout_seconds,
+            max_image_bytes=settings.server.max_frame_bytes,
+        )
+    except (ImportError, ValueError) as error:
+        raise ModelLoadError(
+            f"No se pudo configurar VisionPsy: {error}. Instala requirements-visionpsy.txt "
+            "y prepara los pesos y llama-server parcheado."
+        ) from error
+
+
 POSE_BACKENDS = {"stub": lambda s: StubPoseEstimator(s.models.pose.scenario, s.models.pose.demo_cycle_seconds),
                  "mediapipe": _mediapipe}
-VISION_BACKENDS = {"stub": lambda s: StubVisionModel(), "llamacpp": _llamacpp, "qvac": _qvac}
+VISION_BACKENDS = {"stub": lambda s: StubVisionModel(), "llamacpp": _llamacpp, "qvac": _qvac,
+                   "visionpsy": _visionpsy}
 
 
 def _load(registry, name: str, settings: Settings):

@@ -75,7 +75,14 @@ class PoseConfig(ConfigModel):
 
 class VisionConfig(ConfigModel):
     backend: str = "stub"
-    gguf_path: str = "../models/visionpsy-nano/model.gguf"
+    gguf_path: str = "../models/visionpsy-nano-flash/visionpsy-nano-460m-flash-q4_k_m-imat.gguf"
+    mmproj_path: str = "../models/visionpsy-nano-flash/mmproj-visionpsy-nano-460m-flash-q8.gguf"
+    executable: str = "../models/visionpsy-nano-flash/runtime/bin/llama-server.exe"
+    runtime_library_dirs: list[str] = Field(default_factory=list)
+    port: int = Field(default=8089, ge=1, le=65535)
+    gpu_layers: int = Field(default=99, ge=0, le=99)
+    startup_timeout_seconds: float = Field(default=90, gt=0)
+    max_tokens: int = Field(default=128, ge=1, le=512)
     timeout_seconds: float = Field(default=15, gt=0)
 
 
@@ -155,7 +162,10 @@ def load_settings(path: str | Path | None = None) -> Settings:
     pose = settings.models.pose
     vision = settings.models.vision
     pose_path = (config_path.parent / pose.model_path).resolve()
-    weight_path = (config_path.parent / vision.gguf_path).resolve()
+    vision_paths = {name: str((config_path.parent / getattr(vision, name)).resolve())
+                    for name in ("gguf_path", "mmproj_path", "executable")}
+    vision_paths["runtime_library_dirs"] = [str((config_path.parent / path).resolve())
+                                            for path in vision.runtime_library_dirs]
     return settings.model_copy(update={"models": settings.models.model_copy(update={
         "pose": pose.model_copy(update={"model_path": str(pose_path)}),
-        "vision": vision.model_copy(update={"gguf_path": str(weight_path)})})})
+        "vision": vision.model_copy(update=vision_paths)})})

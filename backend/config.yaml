@@ -15,8 +15,8 @@ models:
     scenario: demo # standing | fall | demo; demo alterna caída y recuperación.
     demo_cycle_seconds: 24
   vision:
-    backend: stub # stub | llamacpp | qvac
-    gguf_path: ../models/visionpsy-nano/model.gguf
+    backend: stub # stub | visionpsy (opcional, requiere runtime y pesos)
+    gguf_path: ../models/visionpsy-nano-flash/visionpsy-nano-460m-flash-q4_k_m-imat.gguf
     timeout_seconds: 15
 pipeline:
   history_seconds: 30 # Ventana temporal independiente de los FPS.
