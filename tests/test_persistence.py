@@ -235,3 +235,20 @@ def test_camera_credential_is_ingest_only_and_revocable(settings):
         assert client.post("/camera/pair",json={"code":code}).status_code == 403
         assert client.delete("/camera/pair",headers=headers).status_code == 200
         assert not client.app.state.repository.camera_authorized(token)
+
+
+def test_camera_credential_cannot_read_or_modify_caregiver_resources(settings):
+    headers={"Authorization":f"Bearer {settings.token}"}
+    with TestClient(create_app(settings)) as client:
+        code=client.post("/pairing/camera",headers=headers).json()["code"]
+        token=client.post("/camera/pair",json={"code":code}).json()["token"]
+        camera_headers={"Authorization":f"Bearer {token}"}
+        for method,path,body in [
+            ("GET","/zones",None),("PUT","/zones",{"revision":0,"zones":[]}),
+            ("GET","/contacts",None),("DELETE","/contacts/123",None),
+            ("GET","/notifications",None),("POST","/pairing/telegram",None),
+            ("POST","/pairing/telegram_backup",None),("DELETE","/camera/pair",None),
+            ("GET","/alerts/event/actions",None),("POST","/alerts/event/action",{"action":"attend"})]:
+            assert client.request(method,path,headers=camera_headers,json=body).status_code==401,(method,path)
+        assert client.app.state.repository.camera_authorized(token)
+        assert client.get("/zones",headers=headers).json()=={"revision":0,"zones":[]}

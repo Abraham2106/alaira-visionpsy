@@ -41,6 +41,24 @@ it("guarda una zona con coordenadas normalizadas y revisión",async()=>{
   expect(body.zones[0].polygon).toEqual([[.1,.1],[.8,.1],[.8,.8]]);
 });
 
+it("edita, deshace y elimina una zona guardada sin reutilizar coordenadas viejas",async()=>{
+  const polygon=[[.1,.1],[.8,.1],[.8,.8],[.1,.8]];
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({revision:4,zones:[{id:"bed",name:"Cama guardada",kind:"bed",polygon}]})));
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({revision:5,zones:[]})));
+  render(<ZoneEditor token="test-token"/>);
+  fireEvent.click(await screen.findByRole("button",{name:"Cama guardada"}));
+  expect(screen.getByLabelText("Coordenadas de la zona")).toHaveValue("0.1,0.1\n0.8,0.1\n0.8,0.8\n0.1,0.8");
+  fireEvent.click(screen.getByRole("button",{name:"Deshacer"}));
+  expect(screen.getByLabelText("Coordenadas de la zona")).toHaveValue("0.1,0.1\n0.8,0.1\n0.8,0.8");
+  expect(screen.getByRole("button",{name:"Guardar zona"})).toBeEnabled();
+  fireEvent.click(screen.getByRole("button",{name:"Eliminar"}));
+  await screen.findByText("Zonas guardadas");
+  const call=vi.mocked(fetch).mock.calls.find(([,init])=>init?.method==="PUT");
+  expect(JSON.parse(call![1]!.body as string)).toEqual({revision:4,zones:[]});
+  expect(screen.getByLabelText("Coordenadas de la zona")).toHaveValue("");
+  expect(screen.getByRole("button",{name:"Guardar zona"})).toBeDisabled();
+});
+
 const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall"};
 
 it("no presenta expiración como atención y registra una acción",async()=>{

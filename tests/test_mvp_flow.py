@@ -46,6 +46,11 @@ def test_paired_camera_event_delivery_attention_and_restart(settings,tmp_path,jp
             assert client.get("/alerts",headers=headers).json()[0]["attention"]=="attending"
             assert client.delete("/camera/pair",headers=headers).status_code==200
         saved_id=fall["id"]
+        # Persistencia limitada a metadatos: ni imágenes ni credenciales en claro.
+        dump="\n".join(app.state.repository.db.iterdump())
+        assert jpeg.decode("latin1") not in dump
+        assert "synthetic-test-frame" not in dump
+        assert credential not in dump and config.token not in dump
     with TestClient(create_app(config,clock=lambda:now[0])) as client:
         assert client.get("/zones",headers=headers).json()["zones"][0]["id"]=="bed"
         restored=next(e for e in client.get("/alerts",headers=headers).json() if e["id"]==saved_id)

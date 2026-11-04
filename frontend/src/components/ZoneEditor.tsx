@@ -39,8 +39,8 @@ export default function ZoneEditor({token}:{token:string}) {
   },[monitor.frame]);
   useEffect(()=>()=>{if(source)URL.revokeObjectURL(source);},[source]);
 
-  function reset() {setSelected(null);setPoints([]);setName("Cama");setKind("bed");setNotice("");}
-  function choose(zone:Zone) {setSelected(zone.id);setPoints(zone.polygon);setName(zone.name);setKind(zone.kind);setNotice("");}
+  function reset() {setSelected(null);setPoints([]);setCoordinates("");setName("Cama");setKind("bed");setNotice("");}
+  function choose(zone:Zone) {setSelected(zone.id);setPoints(zone.polygon);setCoordinates(zone.polygon.map(p=>p.join(",")).join("\n"));setName(zone.name);setKind(zone.kind);setNotice("");}
   async function save(remove=false) {
     const version=++saveVersion.current;
     setPending(true);setError(null);setNotice("");
@@ -77,7 +77,7 @@ export default function ZoneEditor({token}:{token:string}) {
             if(next.length>=3 && next.length<=32 && next.every(p=>p.length===2 && p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))) {setPoints(next as [number,number][]);setError(null);}
             else setError("Escribe entre 3 y 32 puntos válidos, uno por línea.");
           }}>Aplicar coordenadas</button></details>
-        <div className="button-row"><button type="button" className="button button-outline" disabled={!points.length||pending} onClick={()=>setPoints(p=>p.slice(0,-1))}><Undo2 size={16}/>Deshacer</button>
+        <div className="button-row"><button type="button" className="button button-outline" disabled={!points.length||pending} onClick={()=>{const next=points.slice(0,-1);setPoints(next);setCoordinates(next.map(p=>p.join(",")).join("\n"));}}><Undo2 size={16}/>Deshacer</button>
           <button type="button" className="button button-dark" disabled={points.length<3||!name.trim()||pending} onClick={()=>void save()}><Save size={16}/>{pending?"Guardando…":"Guardar zona"}</button>
           {selected && <button type="button" className="button button-outline" disabled={pending} onClick={()=>void save(true)}><Trash2 size={16}/>Eliminar</button>}</div>
         {error&&<p className="error-box" role="alert">{error}</p>}<p role="status">{notice}</p>
