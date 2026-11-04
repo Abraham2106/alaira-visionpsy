@@ -42,6 +42,7 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
                 raise RuntimeError(f"No se pudo iniciar VisionPsy-Local: {error}") from error
             repository = Repository(current.storage.path)
             resources.callback(repository.close)
+            await asyncio.to_thread(repository.prune, clock(), current.storage.retention_days)
             document = repository.zones()
             if document.revision == 0 and current.risk.safe_zones:
                 document = repository.replace_zones(ZonesDocument(zones=[

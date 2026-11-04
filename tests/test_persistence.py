@@ -211,6 +211,21 @@ def test_retention_keeps_recent_pending_but_removes_old_closed_events():
     repo.close()
 
 
+def test_startup_applies_retention_before_replaying_history(settings,tmp_path):
+    path=tmp_path/"retention.sqlite3"
+    now=10*86400
+    repo=Repository(path)
+    repo.save_alert(event(id="old-closed",timestamp=100,state="RESOLVED",attention="closed"))
+    repo.save_alert(event(id="recent-closed",timestamp=now-100,state="RESOLVED",attention="closed"))
+    repo.save_alert(event(id="old-unresolved",timestamp=200))
+    repo.close()
+    config=settings.model_copy(update={"storage":settings.storage.model_copy(update={"path":str(path)})})
+    with TestClient(create_app(config,clock=lambda:now)) as client:
+        result=client.get("/alerts",headers={"Authorization":f"Bearer {settings.token}"}).json()
+        assert {item["id"] for item in result}=={"recent-closed","old-unresolved"}
+        assert {item["id"] for item in client.app.state.pipeline.snapshot()}=={"recent-closed","old-unresolved"}
+
+
 def test_zones_api_is_authenticated_and_changes_pipeline(settings,tmp_path):
     config=settings.model_copy(update={"storage":settings.storage.model_copy(update={"path":str(tmp_path/"app.db")})})
     headers={"Authorization":f"Bearer {settings.token}"}
