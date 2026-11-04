@@ -72,4 +72,4 @@ npm --prefix frontend run build
 
 Las pruebas de reglas y del bot usan datos/proveedores sintéticos: no prueban precisión clínica ni recepción en un celular real. MediaPipe real y WSS se comprobaron por separado en una sesión local de dos minutos. Queda pendiente la aceptación física del teléfono, red y cuenta Telegram.
 
-El análisis visual complementario VisionPsy-Nano aún no está integrado en esta rama: el backend visual predeterminado devuelve una respuesta marcada como sintética y no decide ni cancela alertas. No confundirlo con MediaPipe, que sí ejecuta inferencia real en `--mode real`.
+El análisis visual complementario VisionPsy-Nano está pospuesto: en una prueba local con el servidor oficial y una imagen sintética, las consultas CPU tardaron 45–48 segundos, por encima del plazo de 15 segundos del MVP. El backend visual predeterminado devuelve una respuesta marcada como sintética y no decide ni cancela alertas. No confundirlo con MediaPipe, que sí ejecuta inferencia real en `--mode real`.
