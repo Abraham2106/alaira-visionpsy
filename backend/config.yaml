@@ -1,0 +1,45 @@
+# Configuración de VisionPsy-Local; los tiempos y umbrales se ajustan aquí.
+server:
+  host: "127.0.0.1"
+  port: 8000
+  allowed_origins: ["http://localhost:5173", "http://127.0.0.1:5173"]
+  max_frame_bytes: 2000000
+  auth_timeout_seconds: 5
+  send_timeout_seconds: 2
+  camera_timeout_seconds: 4
+  tick_seconds: 0.5
+models:
+  pose:
+    backend: stub
+    model_path: ../models/pose_landmarker_lite.task
+    scenario: demo # standing | fall | demo; demo alterna caída y recuperación.
+    demo_cycle_seconds: 24
+  vision:
+    backend: stub # stub | llamacpp | qvac
+    gguf_path: ../models/visionpsy-nano/model.gguf
+    timeout_seconds: 15
+pipeline:
+  history_seconds: 30 # Ventana temporal independiente de los FPS.
+  history_size: 1024 # Tope duro de memoria; a 60 FPS aún cubre más de 17 s.
+  vision_question: "¿Hay una persona en el suelo fuera de la cama o silla?"
+alerts:
+  auto_resolve_seconds: 3
+  expire_seconds: 120
+  history_size: 100
+risk:
+  torso_angle_deg: 60
+  hip_drop_speed: 0.8 # Alturas de imagen por segundo; Y crece hacia abajo.
+  drop_window_seconds: 1
+  immobile_seconds: 5
+  motion_epsilon: 0.015
+  min_visibility: 0.5
+  max_pose_gap_seconds: 1
+  safe_zones: [] # Lista de polígonos normalizados; la cadera determina pertenencia.
+privacy:
+  save_clips: false # Reservado, opt-in; NO implementa grabación, incluso con true.
+storage:
+  retention_days: 7
+notifications:
+  enabled: false
+  reminder_seconds: 60
+  room_alias: Habitación

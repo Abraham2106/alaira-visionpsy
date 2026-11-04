@@ -1,0 +1,33 @@
+import { useCallback, useState } from "react";
+import { useCameraCapture } from "../hooks/useCameraCapture";
+import { useWebSocket } from "../hooks/useWebSocket";
+
+export default function MobileCamera() {
+  const [code,setCode]=useState("");
+  const [token,setToken]=useState("");
+  const [running,setRunning]=useState(false);
+  const [consent,setConsent]=useState(false);
+  const [pending,setPending]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+  const ingest=useWebSocket("/ws/ingest",token,undefined,running&&Boolean(token));
+  const fail=useCallback((message:string)=>{setError(message);setRunning(false);},[]);
+  const {videoRef,captureRef,frames,resetFrames}=useCameraCapture("camera",running,ingest.send,fail);
+  async function pair(event:React.FormEvent) {
+    event.preventDefault();setPending(true);setError(null);
+    try {const result=await fetch("/api/camera/pair",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:code.trim()})});
+      if(!result.ok)throw new Error(result.status===429?"Espera un minuto antes de reintentar.":"Código inválido o vencido.");
+      const body=await result.json() as {token:string};setToken(body.token);setCode("");
+    }catch(cause){setError(cause instanceof Error?cause.message:"No se pudo vincular.");}finally{setPending(false);}
+  }
+  return <main className="mobile-capture panel settings-panel"><div className="panel-heading"><h1>Cámara del celular</h1></div><div className="settings-body">
+    {!token&&<form onSubmit={e=>void pair(e)}><label htmlFor="pair-code">Código de cámara</label><input id="pair-code" value={code} maxLength={100} autoComplete="off" onChange={e=>setCode(e.target.value)} required/>
+      <button type="submit" className="button button-dark w-full" disabled={pending||!code.trim()}>{pending?"Vinculando…":"Vincular"}</button></form>}
+    <div className="camera-preview"><video ref={videoRef} muted playsInline/><canvas ref={captureRef} hidden/>{!running&&<div className="preview-label">Captura detenida</div>}</div>
+    <p role="status">{running?(ingest.connected?"Conectada a la PC":"Reconectando…"):"Detenida"} · {frames} frames enviados</p>
+    <label className="consent-control"><input type="checkbox" checked={consent} disabled={running} onChange={e=>setConsent(e.target.checked)}/>La persona supervisada consiente el uso de la cámara.</label>
+    <button type="button" className="button button-dark" disabled={!token||(!running&&!consent)} onClick={()=>{setError(null);if(!running)resetFrames();setRunning(v=>!v);}}>{running?"Detener cámara":"Iniciar cámara"}</button>
+    <button type="button" className="button button-outline" disabled={running||!token} onClick={()=>setToken("")}>Cambiar vinculación</button>
+    {(error||ingest.error)&&<p className="error-box" role="alert">{error||ingest.error}</p>}
+    <p className="small-note">Mantén esta página visible y el teléfono conectado a alimentación. Sin audio ni grabación continua. La inferencia se realiza en la PC.</p>
+  </div></main>;
+}

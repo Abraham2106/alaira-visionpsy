@@ -1,0 +1,5 @@
+# Requisitos opcionales para la cámara de PC con MediaPipe Pose real.
+# Se conserva 0.10.21 mientras se revisa el reporte upstream #6291 sobre Clearcut en 0.10.35.
+-r backend/requirements.txt
+mediapipe==0.10.21
+Pillow>=10,<13

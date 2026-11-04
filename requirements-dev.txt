@@ -1,0 +1,5 @@
+# Dependencias para verificar el scaffold sin modelos ni servicios externos.
+-r backend/requirements.txt
+pytest>=8,<9
+httpx>=0.27,<1
+jsonschema>=4.23,<5

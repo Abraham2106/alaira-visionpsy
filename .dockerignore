@@ -1,0 +1,11 @@
+# Evita enviar secretos, modelos o dependencias locales al contexto de Docker.
+**/.env
+**/.venv
+**/node_modules
+**/__pycache__
+**/dist
+models
+llama.cpp
+certs
+.git
+reports

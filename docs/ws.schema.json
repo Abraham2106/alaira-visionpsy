@@ -1,0 +1,267 @@
+{
+  "$comment": "Contrato de mensajes JSON de VisionPsy-Local; frames JPEG viajan como binario.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AlertMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "alert",
+          "default": "alert",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "number"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "number"
+        },
+        "level": {
+          "enum": [
+            "ok",
+            "suspect",
+            "critical"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "state": {
+          "enum": [
+            "OPEN",
+            "ACKNOWLEDGED",
+            "RESOLVED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "event": {
+          "anyOf": [
+            {
+              "enum": [
+                "acknowledge",
+                "auto_resolve",
+                "expire"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision"
+        },
+        "vision_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vision Error"
+        },
+        "attention": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "attending",
+            "discarded",
+            "closed",
+            "expired"
+          ],
+          "title": "Attention",
+          "type": "string"
+        },
+        "recovery_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recovery At"
+        },
+        "kind": {
+          "default": "fall",
+          "enum": [
+            "fall",
+            "technical"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "updated_at",
+        "level",
+        "reasons",
+        "state"
+      ],
+      "title": "AlertMsg",
+      "type": "object"
+    },
+    "PoseMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "pose",
+          "default": "pose",
+          "title": "Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "number"
+        },
+        "landmarks": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "maxItems": 33,
+              "minItems": 33,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Landmarks"
+        }
+      },
+      "required": [
+        "timestamp"
+      ],
+      "title": "PoseMsg",
+      "type": "object"
+    },
+    "StatusMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "status",
+          "default": "status",
+          "title": "Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "number"
+        },
+        "level": {
+          "enum": [
+            "ok",
+            "suspect",
+            "critical"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "camera": {
+          "enum": [
+            "waiting",
+            "streaming",
+            "disconnected"
+          ],
+          "title": "Camera",
+          "type": "string"
+        },
+        "model_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Error"
+        }
+      },
+      "required": [
+        "timestamp",
+        "level",
+        "reasons",
+        "camera"
+      ],
+      "title": "StatusMsg",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "alert": "#/$defs/AlertMsg",
+      "pose": "#/$defs/PoseMsg",
+      "status": "#/$defs/StatusMsg"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/PoseMsg"
+    },
+    {
+      "$ref": "#/$defs/StatusMsg"
+    },
+    {
+      "$ref": "#/$defs/AlertMsg"
+    }
+  ]
+}

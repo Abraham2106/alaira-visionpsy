@@ -1,0 +1,23 @@
+# Excluye secretos, dependencias y artefactos locales de VisionPsy-Local.
+.env
+.venv/
+.venv311/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+*.tsbuildinfo
+models/
+llama.cpp/
+certs/
+reports/*.png
+reports/*.log
+data/
+
+# Logística y evidencia internas: permanecen locales.
+docs/*
+!docs/ws.schema.json
+reports/
+tests/test_frontend.md
+scripts/export_scaffold.py
+scripts/update_wbs_progress.py
