@@ -59,7 +59,7 @@ it("edita, deshace y elimina una zona guardada sin reutilizar coordenadas viejas
   expect(screen.getByRole("button",{name:"Guardar zona"})).toBeDisabled();
 });
 
-const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall"};
+const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall",zones:null};
 
 it("no presenta expiración como atención y registra una acción",async()=>{
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({...alert,attention:"attending"})));

@@ -29,6 +29,7 @@ export interface AlertMsg {
   attention: "pending" | "attending" | "discarded" | "closed" | "expired";
   recovery_at: number | null;
   kind: "fall" | "technical";
+  zones: { revision: number; zones: { id: string; name: string; kind: "bed" | "chair" | "other"; polygon: [number, number][] }[] } | null;
 }
 export type ServerMsg = PoseMsg | StatusMsg | AlertMsg;
 export interface Health {

@@ -39,6 +39,7 @@ def test_paired_camera_event_delivery_attention_and_restart(settings,tmp_path,jp
                 assert ws.receive_json()["type"] == "processed"
             events=client.get("/alerts",headers=headers).json()
             fall=next(e for e in events if e["kind"]=="fall")
+            assert fall["zones"]=={"revision":1,"zones":zones["zones"]}
             client.portal.call(worker.deliver_once)
             delivered=[p for method,p in calls if method=="sendMessage" and fall["id"] in p["text"]]
             assert len(delivered)==1 and set(delivered[0])=={"chat_id","text","reply_markup"}
@@ -55,6 +56,9 @@ def test_paired_camera_event_delivery_attention_and_restart(settings,tmp_path,jp
         assert client.get("/zones",headers=headers).json()["zones"][0]["id"]=="bed"
         restored=next(e for e in client.get("/alerts",headers=headers).json() if e["id"]==saved_id)
         assert restored["attention"]=="attending"
+        assert client.put("/zones",headers=headers,json={"revision":1,"zones":[]}).status_code==200
+        historical=next(e for e in client.get("/alerts",headers=headers).json() if e["id"]==saved_id)
+        assert historical["zones"]==restored["zones"]=={"revision":1,"zones":zones["zones"]}
         assert client.get(f"/alerts/{saved_id}/actions",headers=headers).json()[0]["action"]=="attend"
         notices=client.get("/notifications",headers=headers).json()["deliveries"]
         assert any(d["event_id"]==saved_id and d["status"]=="sent" for d in notices)

@@ -121,6 +121,17 @@
           ],
           "title": "Kind",
           "type": "string"
+        },
+        "zones": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ZonesDocument"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -242,6 +253,79 @@
         "camera"
       ],
       "title": "StatusMsg",
+      "type": "object"
+    },
+    "Zone": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "default": "other",
+          "enum": [
+            "bed",
+            "chair",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "polygon": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 32,
+          "minItems": 3,
+          "title": "Polygon",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "polygon"
+      ],
+      "title": "Zone",
+      "type": "object"
+    },
+    "ZonesDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "zones": {
+          "items": {
+            "$ref": "#/$defs/Zone"
+          },
+          "maxItems": 16,
+          "title": "Zones",
+          "type": "array"
+        }
+      },
+      "title": "ZonesDocument",
       "type": "object"
     }
   },

@@ -71,8 +71,9 @@ class AlertStore:
                 return None
             while len(self.history) >= self.config.history_size:
                 del self.history[next(iter(self.history))]
+            zones = await asyncio.to_thread(self.repository.zones) if self.repository is not None else None
             alert = AlertMsg(id=uuid.uuid4().hex, timestamp=now, updated_at=now,
-                             level=assessment.level, reasons=list(assessment.reasons), state="OPEN", kind=self.kind)
+                             level=assessment.level, reasons=list(assessment.reasons), state="OPEN", kind=self.kind, zones=zones)
             result = await self._publish(alert)
             self.active_id, self.ok_since = alert.id, None
             return result

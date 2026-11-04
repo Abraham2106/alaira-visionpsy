@@ -2,6 +2,7 @@
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from .domain import ZonesDocument
 
 Level = Literal["ok", "suspect", "critical"]
 AlertState = Literal["OPEN", "ACKNOWLEDGED", "RESOLVED"]
@@ -40,6 +41,7 @@ class AlertMsg(Message):
     attention: Literal["pending", "attending", "discarded", "closed", "expired"] = "pending"
     recovery_at: float | None = None
     kind: Literal["fall", "technical"] = "fall"
+    zones: ZonesDocument | None = None
 
 
 ServerMessage = Annotated[PoseMsg | StatusMsg | AlertMsg, Field(discriminator="type")]
