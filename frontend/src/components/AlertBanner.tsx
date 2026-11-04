@@ -1,9 +1,11 @@
-// Aviso persistente de la alerta abierta más reciente, visible fuera del panel lateral.
+// Prioriza posibles caídas; entre alertas equivalentes muestra la más reciente.
 import { TriangleAlert } from "lucide-react";
 import { REASONS, type AlertMsg } from "../types";
 
 export default function AlertBanner({ alerts }: { alerts: AlertMsg[] }) {
-  const open = alerts.find((alert) => alert.state === "OPEN");
+  const open = alerts.filter(alert => alert.state === "OPEN").sort((a,b) =>
+    Number(b.kind === "fall") - Number(a.kind === "fall") ||
+    Number(b.level === "critical") - Number(a.level === "critical") || b.timestamp - a.timestamp)[0];
   if (!open) return null;
   const time = new Date(open.timestamp * 1000).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",

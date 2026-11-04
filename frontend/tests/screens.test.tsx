@@ -2,6 +2,7 @@ import {beforeEach,expect,it,vi} from "vitest";
 import {fireEvent,render,screen,waitFor} from "@testing-library/react";
 import ZoneEditor from "../src/components/ZoneEditor";
 import AlertPanel from "../src/components/AlertPanel";
+import AlertBanner from "../src/components/AlertBanner";
 import MobileCamera from "../src/components/MobileCamera";
 import FamilySettings from "../src/components/FamilySettings";
 import type {AlertMsg} from "../src/types";
@@ -60,6 +61,19 @@ it("edita, deshace y elimina una zona guardada sin reutilizar coordenadas viejas
 });
 
 const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall",zones:null};
+
+it("prioriza la caída pendiente frente a la interrupción técnica sin cambiar el historial",()=>{
+  const technical:AlertMsg={...alert,id:"camera",timestamp:200,state:"OPEN",kind:"technical",level:"suspect",reasons:["camera_disconnected"]};
+  const fall:AlertMsg={...alert,id:"fall",state:"OPEN",attention:"pending"};
+  const events=[technical,fall];
+  const view=render(<AlertBanner alerts={events}/>);
+  expect(screen.getByText("Posible caída detectada")).toBeInTheDocument();
+  expect(events.map(e=>e.id)).toEqual(["camera","fall"]);
+  view.rerender(<AlertBanner alerts={[technical,{...fall,state:"ACKNOWLEDGED"}]}/>);
+  expect(screen.getByText("Monitoreo interrumpido")).toBeInTheDocument();
+  view.rerender(<AlertBanner alerts={[alert]}/>);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
 
 it("no presenta expiración como atención y registra una acción",async()=>{
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({...alert,attention:"attending"})));
