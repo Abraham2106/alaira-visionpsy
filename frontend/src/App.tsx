@@ -6,7 +6,6 @@ import AlertBanner from "./components/AlertBanner";
 import AlertPanel from "./components/AlertPanel";
 import CameraSender from "./components/CameraSender";
 import MonitorDetails from "./components/MonitorDetails";
-import VisionChat from "./components/VisionChat";
 import VideoCanvas from "./components/VideoCanvas";
 import ZoneEditor from "./components/ZoneEditor";
 import FamilySettings from "./components/FamilySettings";
@@ -68,7 +67,7 @@ function Dashboard({ token }: { token: string }) {
 }
 
 const SCREENS: Record<string, ComponentType<{token:string}>> = {
-  "#/zones":ZoneEditor, "#/family":FamilySettings, "#/events":EventHistory, "#/lab":VisionChat,
+  "#/zones":ZoneEditor, "#/family":FamilySettings, "#/events":EventHistory,
 };
 
 function PersistentCamera({token,active}:{token:string;active:boolean}) {
@@ -114,21 +113,20 @@ export default function App() {
     } catch (error) { setLoginError(error instanceof Error ? error.message : "No se pudo conectar con la PC."); }
   }
   if (hash === "#/phone") return <MobileCamera/>;
-  const title = {"#/camera":"Cámara de PC","#/zones":"Zonas","#/family":"Conexiones","#/events":"Historial","#/lab":"Chat de visión"}[hash] ?? "Monitor de actividad";
+  const title = {"#/camera":"Cámara de PC","#/zones":"Zonas","#/family":"Conexiones","#/events":"Historial"}[hash] ?? "Monitor de actividad";
   const Screen=SCREENS[hash] ?? Dashboard;
   return <Tooltip.Provider delayDuration={200}><div className="app-shell">
     <aside className="sidebar"><a className="brand" href="#/" aria-label="VisionPsy-Local, inicio"><span className="brand-mark"><Activity size={24}/></span><span className="brand-name">VisionPsy</span></a>
       <nav aria-label="Principal"><span className="nav-label">GENERAL</span>
-        <a className={!['#/camera','#/zones','#/family','#/events','#/lab'].includes(hash) ? "nav-item selected" : "nav-item"} href="#/"><Activity size={17}/>Monitor</a>
+        <a className={!['#/camera','#/zones','#/family','#/events'].includes(hash) ? "nav-item selected" : "nav-item"} href="#/"><Activity size={17}/>Monitor</a>
         <a className={hash === "#/camera" ? "nav-item selected" : "nav-item"} href="#/camera"><Video size={17}/>Cámara de PC</a>
         <a className={hash === "#/zones" ? "nav-item selected" : "nav-item"} href="#/zones"><MapPin size={17}/>Zonas</a>
         <a className={hash === "#/family" ? "nav-item selected" : "nav-item"} href="#/family"><Users size={17}/>Conexiones</a>
         <a className={hash === "#/events" ? "nav-item selected" : "nav-item"} href="#/events"><History size={17}/>Historial</a>
-        <a className={hash === "#/lab" ? "nav-item selected" : "nav-item"} href="#/lab"><Video size={17}/>Chat de visión</a>
       </nav>
       <div className="sidebar-bottom"><span className="local-indicator"><ShieldCheck size={16}/>Red local</span>
         {token && <button type="button" className="nav-item" onClick={() => { setToken(""); setDraft(""); setLoginError(null); }}><LogOut size={17}/>Salir</button>}
-        <span className="sidebar-note">Pose local · análisis visual pendiente</span>
+        <span className="sidebar-note">Pose local · MediaPipe</span>
       </div>
     </aside>
     <div className="workspace"><header className="site-header"><div className="header-start">

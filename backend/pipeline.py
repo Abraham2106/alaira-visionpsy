@@ -129,7 +129,7 @@ class Pipeline:
             await self._observe(None if capacity_limited else result, ts)
             if result.level == "critical":
                 alert = await self._critical(result, ts)
-                if alert is not None:
+                if alert is not None and self.settings.models.vision.backend != "disabled":
                     task = asyncio.create_task(self._confirm(alert.id, jpeg))
                     self._tasks.add(task)
                     task.add_done_callback(self._tasks.discard)

@@ -10,6 +10,25 @@ from backend.pipeline import InvalidFrame, Pipeline
 from backend.risk import Assessment
 
 
+def test_disabled_visual_model_keeps_fall_alerts_without_inference(settings, sink, jpeg):
+    from backend.model_loader import DisabledVisionModel, load_vision_model
+    async def run():
+        config=settings.model_copy(update={
+            "models":settings.models.model_copy(update={"vision":settings.models.vision.model_copy(update={"backend":"disabled"})}),
+            "risk":RiskConfig(immobile_seconds=.4)})
+        model=load_vision_model(config)
+        assert isinstance(model,DisabledVisionModel)
+        pipeline=Pipeline(config,StubPoseEstimator("fall"),model,sink)
+        for index in range(8):
+            await pipeline.process(jpeg,index*.2)
+        assert len(pipeline.alerts.history)==1
+        assert not pipeline._tasks
+        alert=next(iter(pipeline.alerts.history.values()))
+        assert alert.vision is None and alert.vision_error is None
+        await pipeline.close()
+    asyncio.run(run())
+
+
 def test_capacity_loss_cannot_resolve_event_and_recovers_at_supported_fps(settings,sink,jpeg):
     async def run():
         config=settings.model_copy(update={

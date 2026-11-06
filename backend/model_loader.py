@@ -48,6 +48,11 @@ class StubVisionModel:
         return VisionAnswer("[stub] Respuesta sintética; la imagen no fue analizada por IA.")
 
 
+class DisabledVisionModel:
+    async def ask(self, jpeg: bytes, question: str) -> VisionAnswer:
+        raise ModelLoadError("El análisis visual está desactivado")
+
+
 def _mediapipe(settings: Settings) -> PoseEstimator:
     model_path = Path(settings.models.pose.model_path)
     if not model_path.is_absolute():
@@ -148,7 +153,7 @@ def _visionpsy(settings: Settings) -> VisionModel:
 
 POSE_BACKENDS = {"stub": lambda s: StubPoseEstimator(s.models.pose.scenario, s.models.pose.demo_cycle_seconds),
                  "mediapipe": _mediapipe}
-VISION_BACKENDS = {"stub": lambda s: StubVisionModel(), "llamacpp": _llamacpp, "qvac": _qvac,
+VISION_BACKENDS = {"disabled": lambda s: DisabledVisionModel(), "stub": lambda s: StubVisionModel(), "llamacpp": _llamacpp, "qvac": _qvac,
                    "visionpsy": _visionpsy}
 
 

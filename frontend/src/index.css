@@ -97,7 +97,6 @@ h1,h2,h3,p { margin:0; }
 .alert-item h3 svg { color:#a8402c; flex-shrink:0; }
 .alert-item p { color:var(--ink-soft); font-size:12.5px; line-height:1.6; }
 .vision-note { display:grid; gap:2px; font-size:12px; color:var(--ink-soft); line-height:1.55; margin:11px 0; overflow-wrap:anywhere; }
-.vision-label { font-size:10.5px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
 .event-note { color:var(--muted)!important; font-size:11.5px!important; }
 .alert-item .button { margin-top:12px; }
 .alert-action-hint { color:var(--muted)!important; font-size:11.5px!important; margin-top:7px!important; text-align:center; }
@@ -158,20 +157,6 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .telegram-setup { display:grid; gap:10px; padding-bottom:16px; border-bottom:1px solid var(--border); }
 .telegram-setup .small-note { margin:0; }
 .telegram-setup a { text-decoration:underline; text-underline-offset:3px; }
-.vision-lab { display:grid; grid-template-columns:minmax(250px,360px) minmax(0,1fr); gap:12px; }
-.vision-lab-input { padding:20px; }
-.vision-lab-input h2 { font-size:16px; margin-bottom:16px; }
-.vision-lab-input img { display:block; width:100%; max-height:40vh; object-fit:contain; margin-top:14px; border-radius:12px; }
-.vision-lab-input form { margin-top:18px; }
-.vision-lab-input textarea { width:100%; padding:12px; border:1px solid var(--border); border-radius:12px; background:var(--surface-soft); resize:vertical; font:13px/1.5 Consolas,monospace; }
-.vision-lab-input form .button { margin-top:10px; }
-.vision-chat-log { padding:0 20px 20px; max-height:65vh; overflow:auto; }
-.vision-chat-log article { padding:16px 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
-.vision-chat-prompt { color:var(--accent-strong); font-size:13px; margin-bottom:10px; }
-.vision-chat-answer { white-space:pre-wrap; line-height:1.6; font:14px/1.6 Consolas,monospace; }
-.vision-chat-trace { padding:16px 20px; border-top:1px solid var(--border); }
-.vision-chat-trace pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; margin-top:12px; max-height:40vh; overflow:auto; }
-@media(max-width:760px) { .vision-lab { grid-template-columns:minmax(0,1fr); } }
 .preview-label { position:absolute; inset:0; background:var(--surface-soft); display:grid; place-items:center; font-size:14px; color:var(--muted); }
 .connection-line { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:15px 0; font-size:12px; color:var(--muted); }
 .connection-line > span:last-child { margin-left:auto; }

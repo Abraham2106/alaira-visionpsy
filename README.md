@@ -100,7 +100,7 @@ Estado de validación de varias cámaras: con Python 3.12 pasan las 150 pruebas 
 
 ### VisionPsy-Nano Flash (opcional)
 
-Añade una descripción visual al evento mediante el fork local de llama.cpp de QVAC. El riesgo y las alertas siguen dependiendo de MediaPipe y las reglas. El backend predeterminado `stub` devuelve texto marcado como sintético.
+El VLM está desactivado por defecto (`models.vision.backend: disabled`): no se carga ni se consulta y no ocupa VRAM. El monitoreo, el riesgo y las alertas funcionan con MediaPipe y las reglas temporales. Se conserva el adaptador opcional para experimentación; las pruebas locales mostraron errores de interpretación de posturas.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-visionpsy.txt -r requirements-visionpsy-download.txt

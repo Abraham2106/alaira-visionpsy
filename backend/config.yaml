@@ -15,7 +15,7 @@ models:
     scenario: demo # standing | fall | demo; demo alterna caída y recuperación.
     demo_cycle_seconds: 24
   vision:
-    backend: stub # stub | visionpsy (opcional, requiere runtime y pesos)
+    backend: disabled # Sin análisis VLM; detección temporal con MediaPipe.
     gguf_path: ../models/visionpsy-nano-flash/visionpsy-nano-460m-flash-q4_k_m-imat.gguf
     timeout_seconds: 15
 pipeline:

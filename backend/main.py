@@ -1,7 +1,5 @@
 # Aplicación FastAPI local con REST autenticado y adaptadores WebSocket de ingesta y dashboard.
 import asyncio
-import base64
-import binascii
 import secrets
 import os
 import time
@@ -136,8 +134,6 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
     async def validation_error(request: Request, error: RequestValidationError):
         if request.url.path == "/telegram":
             return JSONResponse(status_code=422, content={"detail":"Introduce un token válido de BotFather."})
-        if request.url.path == "/vision/ask":
-            return JSONResponse(status_code=422, content={"detail":"Revisa la imagen y la pregunta (máximo 2000 caracteres)."})
         return await request_validation_exception_handler(request, error)
     async def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
         expected = app.state.settings.token
@@ -151,35 +147,6 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
         return {"status": "ok", "name": "VisionPsy-Local", "pose": current.models.pose.backend,
                 "vision": current.models.vision.backend, "scenario": current.models.pose.scenario,
                 "synthetic": current.models.pose.backend == "stub"}
-
-    class VisionQuery(BaseModel):
-        image: str = Field(min_length=1, max_length=2_700_000)
-        question: str = Field(min_length=1, max_length=2000)
-
-    @app.post("/vision/ask", dependencies=[Depends(require_token)])
-    async def vision_query(body: VisionQuery):
-        try:
-            from .visionpsy import VisionPsyBusyError, VisionPsyTimeoutError, VisionPsyError
-        except ImportError:
-            raise HTTPException(503, "Instala las dependencias opcionales de VisionPsy para usar el chat.") from None
-        question = body.question.strip()
-        try:
-            jpeg = base64.b64decode(body.image, validate=True)
-        except (ValueError, binascii.Error):
-            raise HTTPException(400, "Imagen inválida") from None
-        if not question or len(jpeg)>2_000_000 or not jpeg.startswith(b"\xff\xd8") or not jpeg.endswith(b"\xff\xd9"):
-            raise HTTPException(400, "Usa un JPEG de hasta 2 MB y escribe una pregunta.")
-        started = time.perf_counter()
-        try:
-            answer = await app.state.pipeline.vision.ask(jpeg, question)
-        except VisionPsyBusyError:
-            raise HTTPException(409, "El modelo está ocupado. Reintenta en unos segundos.") from None
-        except (VisionPsyTimeoutError, TimeoutError):
-            raise HTTPException(504, "El modelo agotó el tiempo de respuesta.") from None
-        except (VisionPsyError, ValueError):
-            raise HTTPException(502, "No se pudo analizar esta imagen.") from None
-        return {"answer":answer.text,"seconds":round(time.perf_counter()-started,3),
-                "model":app.state.settings.models.vision.backend,"synthetic":app.state.settings.models.vision.backend=="stub"}
 
     @app.get("/alerts", dependencies=[Depends(require_token)])
     async def alerts(limit: int = Query(default=50,ge=1,le=200)):

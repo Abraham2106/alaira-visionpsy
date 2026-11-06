@@ -1,6 +1,6 @@
 import type { Health, StatusMsg } from "../types";
 
-const MODEL_LABEL: Record<string, string> = { stub: "Sintética", mediapipe: "MediaPipe", llamacpp: "llama.cpp", qvac: "QVAC" };
+const MODEL_LABEL: Record<string, string> = { disabled: "Desactivada", stub: "Sintética", mediapipe: "MediaPipe", llamacpp: "llama.cpp", qvac: "QVAC" };
 
 export default function MonitorDetails({ title, status, streaming, health, active }:
   { title: string; status: StatusMsg | null; streaming: boolean; health: Health | null; active: number }) {

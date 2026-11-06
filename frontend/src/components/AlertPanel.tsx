@@ -37,7 +37,7 @@ function AlertItem({ alert, token, onUpdate, names }: { alert: AlertMsg; token: 
     <p>{alert.reasons.map((reason) => REASONS[reason] ?? reason).join(" · ")}</p>
     {where && <p className="alert-sources">Detectada por: {where}</p>}
     <p>{ATTENTION_LABEL[alert.attention ?? "pending"]}</p>
-    {alert.kind!=="technical"&&<div className="vision-note"><span className="vision-label">Análisis visual</span><span>{visionText(alert)}</span></div>}
+    {alert.kind!=="technical"&&(alert.vision||alert.vision_error)&&<div className="vision-note"><span className="vision-label">Análisis visual</span><span>{visionText(alert)}</span></div>}
     {alert.event && <p className="event-note">{alert.kind==="technical"&&alert.event==="auto_resolve"?"Señal recuperada":EVENT_LABEL[alert.event]}</p>}
     {!['closed','discarded'].includes(alert.attention) && <div className="event-actions">
       {alert.attention!=="attending"&&<button type="button" className="button button-dark w-full" disabled={pending} onClick={()=>void act("attend")}>{pending?"Registrando…":"Estoy atendiendo"}</button>}
