@@ -23,6 +23,7 @@ export default function CameraSender({ token, active: visible = true }: { token:
   const [running, setRunning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraId, setCameraId] = useState(DEFAULT_CAMERA);
+  const [cameraAspect, setCameraAspect] = useState(16 / 9);
   const { cameras, names } = useCameras(token);
   // El servidor asigna cam-1 por defecto; solo se envía camera_id si se elige otra.
   const ingest = useWebSocket("/ws/ingest", token, undefined, running, cameraId === DEFAULT_CAMERA ? undefined : cameraId);
@@ -48,8 +49,11 @@ export default function CameraSender({ token, active: visible = true }: { token:
     <div className="monitor-grid"><section className="monitor-main">
       <section className="panel feed-panel">
         <div className="panel-heading"><h2>Cámara</h2><span className="local-indicator">{running && streaming ? "En directo" : statusTitle}</span></div>
-        <div className="camera-preview">
-          <video ref={videoRef} muted playsInline hidden={mode !== "camera"} />
+        <div className="camera-preview" style={{ aspectRatio: mode === "camera" ? cameraAspect : 16 / 9 }}>
+          <video ref={videoRef} muted playsInline hidden={mode !== "camera"} onResize={(event) => {
+            const video = event.currentTarget;
+            if (video.videoWidth && video.videoHeight) setCameraAspect(video.videoWidth / video.videoHeight);
+          }} />
           <canvas ref={captureRef} hidden={mode === "camera" || frame !== null} />
           {frame && <VideoCanvas frame={frame} pose={pose} overlay={mode === "camera"} videoSource={videoRef} />}
           {!running && <div className="preview-label">Captura detenida</div>}
