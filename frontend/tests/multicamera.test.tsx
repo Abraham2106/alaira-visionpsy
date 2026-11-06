@@ -134,3 +134,41 @@ it("el editor de zonas carga y guarda las zonas de la cámara elegida",async()=>
   // cam-1 conserva la ruta histórica sin parámetro.
   expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).endsWith("/zones"))).toBe(true);
 });
+
+it("conserva cada QR al cambiar de cámara y selecciona la recién agregada",async()=>{
+  const cameras=[...CAMERAS];
+  let codeNumber=0;
+  vi.mocked(fetch).mockImplementation(async(input,init)=>{
+    const url=String(input);
+    let body:unknown=[];
+    if(url.endsWith("/cameras")) {
+      if(init?.method==="POST") {
+        const created={id:"cam-3",name:"Cocina",state:"waiting",connected:false};
+        cameras.push(created);body=created;
+      } else body=cameras;
+    } else if(url.includes("/pairing/camera")) body={code:`isolated-${++codeNumber}`,expires_at:Date.now()/1000+300};
+    else if(url.includes("/notifications")) body={enabled:false,error:null,deliveries:[]};
+    return new Response(JSON.stringify(body));
+  });
+  render(<FamilySettings token="test-token"/>);
+  const selected=await screen.findByLabelText("Cámara a vincular");
+  fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
+  await screen.findByText("isolated-1");
+  fireEvent.change(selected,{target:{value:"cam-2"}});
+  fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
+  await screen.findByText("isolated-2");
+  fireEvent.change(selected,{target:{value:"cam-1"}});
+  expect(await screen.findByText("isolated-1")).toBeInTheDocument();
+  expect(codeNumber).toBe(2); // Seleccionar no genera códigos ni renueva credenciales.
+  fireEvent.change(screen.getByLabelText("Nombre de la nueva cámara"),{target:{value:"Cocina"}});
+  fireEvent.click(screen.getByRole("button",{name:"Agregar cámara"}));
+  await waitFor(()=>expect(selected).toHaveValue("cam-3"));
+  fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
+  await screen.findByText("isolated-3");
+  expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url).endsWith("/pairing/camera?camera_id=cam-3")&&init?.method==="POST")).toBe(true);
+  fireEvent.change(selected,{target:{value:"cam-1"}});
+  expect(await screen.findByText("isolated-1")).toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.some(([,init])=>init?.method==="DELETE")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"Desvincular cámara"}));
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url)==="/api/camera/pair?camera_id=cam-1"&&init?.method==="DELETE")).toBe(true));
+});

@@ -16,7 +16,13 @@ export default function FamilySettings({token}:{token:string}) {
   const {cameras,refresh:refreshCameras}=useCameras(token);
   const [pairCamera,setPairCamera]=useState(DEFAULT_CAMERA);
   const [newCamera,setNewCamera]=useState("");
-  const [cameraCode,setCameraCode]=useState<Code|null>(null);
+  const [cameraCodes,setCameraCodes]=useState<Record<string,Code>>({});
+  const cameraCode=cameraCodes[pairCamera]??null;
+  const setCameraCode=(code:Code|null)=>setCameraCodes(previous=>{
+    const next={...previous};
+    if(code)next[pairCamera]=code;else delete next[pairCamera];
+    return next;
+  });
   const [familyCode,setFamilyCode]=useState<Code|null>(null);
   const [address,setAddress]=useState(`${location.origin}/#/phone`);
   const [bot,setBot]=useState("");
@@ -43,9 +49,12 @@ export default function FamilySettings({token}:{token:string}) {
   },[address,cameraCode]);
   useEffect(()=>{
     if(!cameraCode)return;
-    const timer=window.setTimeout(()=>setCameraCode(null),Math.max(0,cameraCode.expires_at*1000-Date.now()));
+    const timer=window.setTimeout(()=>setCameraCodes(previous=>{
+      if(previous[pairCamera]!==cameraCode)return previous;
+      const next={...previous};delete next[pairCamera];return next;
+    }),Math.max(0,cameraCode.expires_at*1000-Date.now()));
     return ()=>window.clearTimeout(timer);
-  },[cameraCode]);
+  },[cameraCode,pairCamera]);
   // cam-1 conserva la ruta histórica; las demás cámaras llevan su id.
   const cameraQuery=pairCamera===DEFAULT_CAMERA?"":`?camera_id=${encodeURIComponent(pairCamera)}`;
   async function issue(purpose:"camera"|"telegram"|"telegram_backup") {
@@ -63,14 +72,15 @@ export default function FamilySettings({token}:{token:string}) {
   async function addCamera() {
     const version=++requestVersion.current;
     setPending(true);setError(null);
-    try {await api<CameraInfo>("/cameras",token,"POST",{name:newCamera.trim()});if(version!==requestVersion.current)return;setNewCamera("");await refreshCameras();}
+    try {const created=await api<CameraInfo>("/cameras",token,"POST",{name:newCamera.trim()});if(version!==requestVersion.current)return;setNewCamera("");setPairCamera(created.id);setQr("");await refreshCameras();}
     catch {if(version===requestVersion.current)setError("No se pudo agregar la cámara. Revisa el nombre y el máximo permitido.");}finally{if(version===requestVersion.current)setPending(false);}
   }
   async function removeCamera(id:string) {
     const version=++requestVersion.current;
     setPending(true);setError(null);
     try {await api(`/cameras/${encodeURIComponent(id)}`,token,"DELETE");if(version!==requestVersion.current)return;
-      if(pairCamera===id){setPairCamera(DEFAULT_CAMERA);setCameraCode(null);}await refreshCameras();}
+      setCameraCodes(previous=>{const next={...previous};delete next[id];return next;});
+      if(pairCamera===id){setPairCamera(DEFAULT_CAMERA);setQr("");}await refreshCameras();}
     catch {if(version===requestVersion.current)setError("No se pudo quitar la cámara.");}finally{if(version===requestVersion.current)setPending(false);}
   }
   const validBot=/^[A-Za-z][A-Za-z0-9_]{4,31}bot$/i.test(bot);
@@ -84,7 +94,7 @@ export default function FamilySettings({token}:{token:string}) {
       <p className="small-note">Todas las cámaras comparten una sola alerta de caída por habitación.</p>
     </div></section>
     <section className="panel settings-panel"><div className="panel-heading"><h2>Cámara del celular</h2></div><div className="settings-body">
-      {cameras.length>1&&<><label htmlFor="pair-camera">Cámara a vincular</label><select id="pair-camera" value={pairCamera} disabled={pending} onChange={e=>{setPairCamera(e.target.value);setCameraCode(null);}}>
+      {cameras.length>1&&<><label htmlFor="pair-camera">Cámara a vincular</label><select id="pair-camera" value={pairCamera} disabled={pending} onChange={e=>{setPairCamera(e.target.value);setQr("");}}>
         {cameras.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></>}
       <label htmlFor="camera-address">Dirección HTTPS de esta PC en la red</label><input id="camera-address" type="url" value={address} onChange={e=>setAddress(e.target.value)}/>
       {qr&&<img className="pairing-qr" src={qr} alt="QR para vincular la cámara del celular"/>}
@@ -92,7 +102,7 @@ export default function FamilySettings({token}:{token:string}) {
       <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue("camera")}>{cameraCode?"Generar nuevo QR":"Generar QR de cámara"}</button>
       {cameraCode&&<><p role="status">Escanea el QR para vincular el celular. Vence a las {new Date(cameraCode.expires_at*1000).toLocaleTimeString()}.</p>
         <details><summary>Ingresar código manualmente</summary><code className="pairing-code">{cameraCode.code}</code></details></>}
-      <button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/camera/pair${cameraQuery}`)}>Desvincular cámara</button>
+      <button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/camera/pair?camera_id=${encodeURIComponent(pairCamera)}`)}>Desvincular cámara</button>
     </div></section>
     <section className="panel settings-panel"><div className="panel-heading"><h2>Familiares</h2><button type="button" className="button button-outline" onClick={()=>void refresh()}>Actualizar</button></div><div className="settings-body">
       <p>{notices?.enabled ? "Bot habilitado" : "Bot deshabilitado: configura Telegram en el backend para enviar avisos reales."}</p>

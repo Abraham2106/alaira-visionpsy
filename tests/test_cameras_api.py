@@ -147,3 +147,34 @@ def test_two_cameras_produce_one_fall_alert_with_both_sources(settings, jpeg):
             falls = [a for a in client.get("/alerts", headers=headers(config)).json() if a["kind"] == "fall"]
             assert len(falls) == 1
             assert set(falls[0]["sources"]) == {"cam-1", "cam-2"}
+
+
+def test_adding_pairing_and_regenerating_another_camera_preserves_live_streams(settings, jpeg):
+    with TestClient(app_with(settings)) as client:
+        h = headers(settings)
+        first = pair(client, settings, "cam-1")
+        main_pipeline = client.app.state.pipelines["cam-1"]
+        with client.websocket_connect("/ws/ingest") as one:
+            one.send_json({"type": "auth", "token": first["token"], "flow_control": True})
+            one.send_bytes(jpeg)
+            assert one.receive_json()["type"] == "processed"
+            assert client.post("/cameras", headers=h, json={"name": "Segundo celular"}).status_code == 201
+            older = client.post("/pairing/camera?camera_id=cam-2", headers=h).json()["code"]
+            newer = client.post("/pairing/camera?camera_id=cam-2", headers=h).json()["code"]
+            assert client.post("/camera/pair", json={"code": older}).status_code == 403
+            second = client.post("/camera/pair", json={"code": newer}).json()
+            with client.websocket_connect("/ws/ingest") as two:
+                two.send_json({"type": "auth", "token": second["token"], "flow_control": True})
+                two.send_bytes(jpeg)
+                assert two.receive_json()["type"] == "processed"
+                # Generar un QR, incluso para la misma cámara, no revoca una conexión ya vinculada.
+                client.post("/pairing/camera?camera_id=cam-1", headers=h)
+                client.post("/pairing/camera?camera_id=cam-2", headers=h)
+                for stream in (one, two):
+                    stream.send_bytes(jpeg)
+                    assert stream.receive_json()["type"] == "processed"
+                assert client.app.state.pipelines["cam-1"] is main_pipeline
+                repository = client.app.state.repository
+                assert repository.camera_authorized(first["token"]) == "cam-1"
+                assert repository.camera_authorized(second["token"]) == "cam-2"
+                assert all(row["connected"] for row in client.get("/cameras", headers=h).json())
