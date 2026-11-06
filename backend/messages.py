@@ -27,6 +27,7 @@ class StatusMsg(Message):
     reasons: list[str]
     camera: Literal["waiting", "streaming", "disconnected"]
     model_error: str | None = None
+    diagnostics: dict[str, float | str | None] | None = None
 
 
 class AlertMsg(Message):

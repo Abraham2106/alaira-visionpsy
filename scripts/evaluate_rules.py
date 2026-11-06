@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 from backend.config import RiskConfig
 from backend.model_loader import synthetic_pose
 from backend.risk import assess
+from backend.fall_detector import TemporalFallDetector
 
 
 def shifted(pose, dx=0, dy=0):
@@ -48,6 +49,12 @@ def evaluate(config_path=ROOT / "backend/config.yaml"):
     rows = []
     for fps in (5, 30):
         for name, label, poses, config in cases(fps, baseline):
+            detector=TemporalFallDetector()
+            temporal_detection=None
+            for pose in poses:
+                result=detector.update(pose,pose.timestamp,config)
+                if result.level=="critical" and temporal_detection is None:
+                    temporal_detection=pose.timestamp
             detection = next((p.timestamp for i, p in enumerate(poses)
                               if assess(poses[:i + 1], config).level == "critical"), None)
             onset = 1 if name == "upright_to_horizontal" else 0
@@ -56,15 +63,20 @@ def evaluate(config_path=ROOT / "backend/config.yaml"):
                          "delay_seconds": None if detection is None else round(detection - onset, 3),
                          "safe_zones": config.safe_zones,
                          "final_reasons": list(assess(poses, config).reasons)})
+            rows[-1]["temporal_event_detected"]=temporal_detection is not None
+            rows[-1]["temporal_delay_seconds"]=None if temporal_detection is None else round(temporal_detection-onset,3)
     counts = {"TP": sum(r["label"] == "risk" and r["event_detected"] for r in rows),
               "FP": sum(r["label"] != "risk" and r["event_detected"] for r in rows),
               "FN": sum(r["label"] == "risk" and not r["event_detected"] for r in rows),
               "unevaluable": sum(r["label"] == "unevaluable" for r in rows)}
     if config_path.read_bytes() != frozen:
         raise RuntimeError("La configuración cambió durante la evaluación; repite con umbrales congelados")
+    temporal_counts={"TP":sum(r["label"]=="risk" and r["temporal_event_detected"] for r in rows),
+                     "FP":sum(r["label"]!="risk" and r["temporal_event_detected"] for r in rows),
+                     "FN":sum(r["label"]=="risk" and not r["temporal_event_detected"] for r in rows)}
     return {"configuration_sha256": hashlib.sha256(frozen).hexdigest(),
             "scope": "12 synthetic landmark sequences at 5 and 30 FPS; rules only; not image perception",
-            "thresholds": baseline.model_dump(), "counts": counts, "sequences": rows}
+            "thresholds": baseline.model_dump(), "counts": counts, "temporal_counts":temporal_counts, "sequences": rows}
 
 
 if __name__ == "__main__":
@@ -72,5 +84,5 @@ if __name__ == "__main__":
     path = ROOT / "reports/rules-evaluation.json"
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(result["counts"]))
-    sys.exit(bool(result["counts"]["FP"] or result["counts"]["FN"]))
+    print(json.dumps({"legacy":result["counts"],"temporal":result["temporal_counts"]}))
+    sys.exit(bool(result["temporal_counts"]["FP"] or result["temporal_counts"]["FN"]))

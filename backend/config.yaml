@@ -34,6 +34,12 @@ risk:
   motion_epsilon: 0.015
   min_visibility: 0.5
   max_pose_gap_seconds: 1
+  confirm_seconds: 2 # Postura compatible sostenida tras una transición brusca observada.
+  body_drop_speed: 1.5 # Longitudes de torso por segundo; no metros/segundo.
+  angular_velocity_deg_s: 90
+  recovery_angle_deg: 35
+  pose_grace_seconds: 0.5 # Conserva sospecha, pero no cuenta tiempo sin pose como evidencia.
+  transition_seconds: 3 # Una sospecha de movimiento no queda latente indefinidamente.
   safe_zones: [] # Lista de polígonos normalizados; la cadera determina pertenencia.
 privacy:
   save_clips: false # Reservado, opt-in; NO implementa grabación, incluso con true.

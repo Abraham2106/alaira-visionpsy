@@ -86,7 +86,7 @@ def test_zone_change_resets_evidence_without_claiming_human_attention(settings,j
         for i in range(6,12):
             now[0]=i*.2
             client.portal.call(pipeline.process,jpeg)
-        assert pipeline.last_status.reasons==["safe_zone"]
+        assert "safe_zone" in pipeline.last_status.reasons and pipeline.last_status.level=="ok"
         assert pipeline.alerts.active_id is None
         assert client.put("/zones",headers=headers,json={"revision":1,"zones":[]}).status_code==200
         now[0]=2.4

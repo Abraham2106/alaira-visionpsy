@@ -18,3 +18,7 @@ describe("coordenadas sobre imagen",()=>{
 it("distingue la capacidad temporal insuficiente del estado normal",()=>{
   expect(monitorTitle(true,{type:"status",timestamp:1,level:"ok",camera:"streaming",reasons:["insufficient_history"],model_error:null})).toBe("Datos temporales insuficientes");
 });
+
+it("una pose no evaluable nunca se etiqueta como ausencia de caída",()=>{
+  expect(monitorTitle(true,{type:"status",camera_id:"cam-1",timestamp:1,level:"ok",camera:"streaming",reasons:["no_pose"],model_error:null,diagnostics:null})).toBe("No evaluable: torso no visible");
+});

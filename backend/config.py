@@ -20,6 +20,12 @@ class RiskConfig(ConfigModel):
     motion_epsilon: float = Field(default=0.015, gt=0)
     min_visibility: float = Field(default=0.5, ge=0, le=1)
     max_pose_gap_seconds: float = Field(default=1, gt=0)
+    confirm_seconds: float = Field(default=2, gt=0)
+    angular_velocity_deg_s: float = Field(default=90, gt=0)
+    body_drop_speed: float = Field(default=1.5, gt=0)
+    recovery_angle_deg: float = Field(default=35, ge=0, lt=60)
+    pose_grace_seconds: float = Field(default=0.5, gt=0)
+    transition_seconds: float = Field(default=3, gt=0)
     safe_zones: list[list[tuple[float, float]]] = Field(default_factory=list)
 
     @field_validator("safe_zones")

@@ -5,6 +5,7 @@ import hashlib
 def test_labeled_rules_suite_is_equivalent_at_5_and_30_fps():
     result = evaluate()
     assert result["counts"] == {"TP": 6, "FP": 0, "FN": 0, "unevaluable": 8}
+    assert result["temporal_counts"] == {"TP":6,"FP":0,"FN":0}
     rows = result["sequences"]
     for slow, fast in zip(rows[:12], rows[12:]):
         assert slow["sequence"] == fast["sequence"]

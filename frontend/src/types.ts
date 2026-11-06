@@ -16,6 +16,7 @@ export interface StatusMsg {
   reasons: string[];
   camera: CameraState;
   model_error: string | null;
+  diagnostics: Record<string, number | string | null> | null;
 }
 export interface AlertMsg {
   type: "alert";
@@ -55,4 +56,8 @@ export const REASONS: Record<string, string> = {
   immobile: "Inmovilidad", safe_zone: "Dentro de zona segura", no_pose: "Sin pose visible",
   insufficient_history: "Capacidad temporal insuficiente",
   model_error: "Error del modelo", camera_disconnected: "Cámara desconectada",
+  partial_pose: "Pose parcial", pose_gap: "Postura no evaluable", fast_rotation: "Giro rápido del torso",
+  falling: "Posible caída en curso", down: "Postura horizontal sostenida", upright: "Postura vertical",
+  fall_transition: "Descenso y cambio de postura", fall_confirmed: "Persona posiblemente caída",
+  floor_context_missing: "Falta contexto corporal para confirmar",
 };

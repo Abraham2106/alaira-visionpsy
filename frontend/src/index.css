@@ -203,3 +203,8 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .mosaic-tile-alert { border-color: #c0392b; }
 .mosaic-tile figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: .85rem; }
 .alert-sources { font-size: .85rem; opacity: .8; }
+.detector-diagnostics { margin-top:12px; font-size:12px; }
+.detector-diagnostics summary { cursor:pointer; color:var(--muted); }
+.detector-diagnostics dl { display:grid; gap:6px; margin:10px 0 0; }
+.detector-diagnostics dl div { display:flex; justify-content:space-between; gap:12px; }
+.detector-diagnostics dd { margin:0; font-variant-numeric:tabular-nums; }

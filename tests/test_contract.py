@@ -17,7 +17,7 @@ def test_documented_schema_matches_backend_and_validates_messages():
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
     examples = [PoseMsg(timestamp=0), PoseMsg(timestamp=0, landmarks=[(0.5, 0.5, 1)] * 33),
-                StatusMsg(timestamp=0, level="ok", reasons=[], camera="waiting"),
+                StatusMsg(timestamp=0, level="ok", reasons=[], camera="waiting", diagnostics={"phase":"UPRIGHT","fps":24,"angle_deg":None}),
                 AlertMsg(id="synthetic", timestamp=0, updated_at=0, level="critical", reasons=[], state="OPEN"),
                 PoseMsg(camera_id="cam-2", timestamp=0),
                 AlertMsg(id="multi", timestamp=0, updated_at=0, level="critical", reasons=[], state="OPEN", sources=["cam-1", "cam-2"]),

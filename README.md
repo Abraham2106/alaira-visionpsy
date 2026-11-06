@@ -40,6 +40,8 @@ Abre **http://127.0.0.1:5175** en la PC: entrarás automáticamente, sin escribi
 
 La configuración está en `backend/config.yaml`; eventos, zonas y avisos se guardan en `data/visionpsy.sqlite3`. La retención predeterminada de eventos resueltos es de 7 días. No se graba video.
 
+El detector temporal distingue postura vertical, posible caída, postura horizontal y persona posiblemente caída. Admite un lado del torso visible; no inventa articulaciones ausentes. Combina descenso relativo al torso, giro y persistencia, con recuperación a un ángulo menor. Los huecos breves conservan la sospecha sin sumar tiempo de confirmación; una pose ausente aparece como **No evaluable**. Los umbrales son experimentales: no calibra el suelo ni garantiza detectar caídas. El diagnóstico plegable muestra señales y tiempos locales.
+
 ### Cámara del celular
 
 Sustituye la IP por la dirección privada real de la PC:
@@ -76,6 +78,10 @@ El principal recibe el aviso inicial; si nadie atiende, tras `notifications.remi
 npm --prefix frontend test
 npm --prefix frontend run build
 ```
+
+Para comparar el detector anterior y el temporal con MediaPipe sobre los mismos videos etiquetados: `python scripts/evaluate_detector.py --fall ruta/caida.mp4 --normal ruta/actividad.mp4`. El informe queda en `reports/`, ignorado por Git; no se guardan frames ni se envían avisos. Es una evaluación exploratoria por video, no precisión clínica. Usa videos con permisos adecuados y suficientes segundos posteriores al evento.
+
+En una comparación exploratoria con cuatro clips de URFD (fall-01, fall-02, adl-01 y adl-02, cámara 0, muestreo a 15 FPS), ambos detectores omitieron las dos caídas y no alertaron en los dos clips cotidianos. La nueva lógica temporal todavía no demuestra una mejora de detección en video real: siguen pendientes la pérdida de pose y la observación posterior a la caída.
 
 `backend/` contiene API, pose, reglas, persistencia y avisos; `frontend/` contiene la interfaz; `scripts/` contiene utilidades de ejecución y verificación; `tests/` contiene pruebas backend. El contrato WebSocket está en `docs/ws.schema.json` y se verifica contra Python y TypeScript.
 

@@ -11,7 +11,8 @@ from .config import Settings
 from .interfaces import EventSink, PoseEstimator, VisionModel
 from .consolidator import RoomConsolidator
 from .messages import PoseMsg, StatusMsg
-from .risk import Assessment, assess
+from .risk import Assessment
+from .fall_detector import TemporalFallDetector
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class Pipeline:
         self.settings, self.estimator, self.vision = settings, estimator, vision
         self.sink, self.clock = sink, clock
         self.camera_id = camera_id
+        self.detector = TemporalFallDetector()
+        self.pose_latency_ms = 0.0
         self.history = deque(maxlen=settings.pipeline.history_size)
         # Almacenes inyectables: la alerta de caídas se comparte por habitación; la técnica es por cámara.
         self.alerts = alerts or (room.alerts if room is not None else AlertStore(settings.alerts, sink, repository=repository))
@@ -67,7 +70,8 @@ class Pipeline:
 
     async def _status(self, result: Assessment, now: float, camera: str, error: str | None = None) -> None:
         self.last_status = StatusMsg(camera_id=self.camera_id, timestamp=now, level=result.level, reasons=list(result.reasons),
-                                     camera=camera, model_error=error)
+                                     camera=camera, model_error=error,
+                                     diagnostics={**self.detector.diagnostics(), "latency_ms": round(self.pose_latency_ms, 1)})
         await self.sink.emit(self.last_status.model_dump(mode="json"))
 
     async def process(self, jpeg: bytes, now: float | None = None) -> None:
@@ -86,12 +90,15 @@ class Pipeline:
             self.last_frame = ts
             await self.sink.emit_frame(self.camera_id, jpeg)
             try:
+                inference_started = time.perf_counter()
                 pose = await asyncio.to_thread(self.estimator.estimate, jpeg, ts)
+                self.pose_latency_ms = (time.perf_counter()-inference_started)*1000
                 message = PoseMsg(camera_id=self.camera_id, timestamp=ts, landmarks=None if pose is None else
                                   [(point.x, point.y, point.visibility) for point in pose.landmarks])
             except Exception:
                 log.exception("Fallo del estimador de pose")
                 self.history.clear()
+                self.detector.update(None, ts, self.settings.risk)
                 await self._observe(None, ts)
                 await self.sink.emit(PoseMsg(camera_id=self.camera_id, timestamp=ts).model_dump(mode="json"))
                 await self._status(Assessment("ok", ("model_error",)), ts, "streaming", "Fallo del estimador de pose")
@@ -105,7 +112,7 @@ class Pipeline:
                 cutoff = ts - self.settings.pipeline.history_seconds
                 while self.history and self.history[0].timestamp < cutoff:
                     self.history.popleft()
-            result = assess(list(self.history), self.settings.risk)
+            result = self.detector.update(pose, ts, self.settings.risk)
             capacity_limited = (len(self.history) == self.history.maxlen
                 and self.history[-1].timestamp - self.history[0].timestamp < self.settings.risk.immobile_seconds
                 and "no_pose" not in result.reasons)
@@ -139,6 +146,7 @@ class Pipeline:
 
     async def _disconnect(self, now: float) -> None:
         was_streaming = self.last_frame is not None
+        self.detector.reset()
         self.history.clear()
         self.last_frame = None
         await self._observe(None, now)
