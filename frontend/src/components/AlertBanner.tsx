@@ -12,7 +12,7 @@ export default function AlertBanner({ alerts, names }: { alerts: AlertMsg[]; nam
   const time = new Date(open.timestamp * 1000).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
   });
-  return <section className="alert-banner" role="alert" aria-live="assertive">
+  return <section className={`alert-banner${open.kind === "technical" ? " alert-banner-technical" : ""}`} role="alert" aria-live="assertive">
     <div className="alert-banner-copy">
       <span className="alert-banner-kicker"><TriangleAlert size={16}/> Alerta sin reconocer</span>
       <strong>{open.kind==="technical"?"Monitoreo interrumpido":"Posible caída detectada"}</strong>

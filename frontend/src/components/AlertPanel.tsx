@@ -28,7 +28,7 @@ function AlertItem({ alert, token, onUpdate, names }: { alert: AlertMsg; token: 
     catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo reconocer la alerta."); }
     finally { setPending(false); }
   }
-  return <li className={`alert-item alert-${alert.state.toLowerCase()}`}>
+  return <li className={`alert-item alert-${alert.state.toLowerCase()}${alert.kind === "technical" ? " alert-technical" : ""}`}>
     <div className="alert-item-head"><span className="alert-state">{alert.event==="expire"?"Expirada":STATE_LABEL[alert.state]}</span>
       <time dateTime={new Date(alert.timestamp * 1000).toISOString()}>
         {new Date(alert.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
