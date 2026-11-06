@@ -153,6 +153,8 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 @media(prefers-reduced-motion:reduce) { * { transition:none!important; } }
 .settings-grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr); gap:12px; }
 .settings-panel { align-self:start; }
+.settings-grid > section.settings-panel { align-self:stretch; display:flex; flex-direction:column; }
+.settings-grid > section.settings-panel > .settings-body { flex:1; align-content:start; }
 .settings-body { padding:16px 20px 22px; display:grid; gap:12px; }
 .settings-body label,.event-actions label { font-size:13px; }
 .settings-body form { display:grid; gap:12px; }
