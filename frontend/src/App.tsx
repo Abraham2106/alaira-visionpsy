@@ -11,8 +11,10 @@ import ZoneEditor from "./components/ZoneEditor";
 import FamilySettings from "./components/FamilySettings";
 import MobileCamera from "./components/MobileCamera";
 import EventHistory from "./components/EventHistory";
+import { useCameras } from "./hooks/useCameras";
 import { useMonitor } from "./hooks/useMonitor";
-import { monitorTitle } from "./monitorStatus";
+import { DEFAULT_CAMERA } from "./frames";
+import { monitorTitle, worstStatus } from "./monitorStatus";
 
 function subscribeHash(change: () => void) {
   window.addEventListener("hashchange", change);
@@ -22,28 +24,44 @@ function subscribeHash(change: () => void) {
 const readHash = () => location.hash;
 
 function Dashboard({ token }: { token: string }) {
-  const { frame, pose, status, alerts, health, connected, error, updateAlert } = useMonitor(token);
-  const streaming = connected && status?.camera === "streaming";
+  const { views, alerts, health, connected, error, updateAlert } = useMonitor(token);
+  const { cameras, names } = useCameras(token);
+  // Una instalación sin lista de cámaras sigue mostrando cam-1; los ids que llegan por WebSocket se añaden.
+  const ids = cameras.length ? cameras.map((camera) => camera.id) : [DEFAULT_CAMERA];
+  for (const id of Object.keys(views)) if (!ids.includes(id)) ids.push(id);
+  const live = ids.filter((id) => views[id]?.status?.camera === "streaming");
+  const primary = live[0] ?? ids[0];
+  const status = worstStatus(Object.fromEntries(ids.map((id) => [id, views[id]?.status ?? null])), primary);
+  const pose = views[primary]?.pose ?? null;
+  const streaming = connected && live.length > 0;
   const active = alerts.filter((alert) => alert.state !== "RESOLVED").length;
   const statusTitle = monitorTitle(connected, status);
+  const many = ids.length > 1;
 
   return <main className="dashboard">
     {error && <p className="error-box" role="alert">{error}</p>}
-    <AlertBanner alerts={alerts}/>
+    <AlertBanner alerts={alerts} names={names}/>
     <div className="stats-grid">
       <div className="stat"><strong>{active}</strong><span>Alertas activas</span></div>
       <div className="stat"><strong>{alerts.length}</strong><span>Alertas de la sesión</span></div>
       <div className="stat"><strong>{pose?.landmarks?.filter(point => point[2] >= .5).length ?? 0}<small>/ 33</small></strong><span>Puntos visibles</span></div>
-      <div className="stat"><strong>{streaming ? "En directo" : "Sin señal"}</strong><span>Cámara</span></div>
+      <div className="stat"><strong>{many ? `${live.length}/${ids.length} en directo` : streaming ? "En directo" : "Sin señal"}</strong><span>{many ? "Cámaras" : "Cámara"}</span></div>
       <div className="stat"><strong className="stat-text">Privada</strong><span>Red local</span></div>
     </div>
     <div className="monitor-grid"><section className="monitor-main">
-      <div className="panel feed-panel"><div className="panel-heading"><h2>Cámara</h2><a href="#/camera" className="icon-button" aria-label="Conectar cámara de la PC"><Video size={18}/></a></div>
-        <VideoCanvas frame={frame} pose={pose}/>
+      <div className="panel feed-panel"><div className="panel-heading"><h2>{many ? "Cámaras" : "Cámara"}</h2><a href="#/camera" className="icon-button" aria-label="Conectar cámara de la PC"><Video size={18}/></a></div>
+        {many ? <div className="video-mosaic">{ids.map((id) => {
+          const view = views[id];
+          const critical = view?.status?.level === "critical" && view.status.camera === "streaming";
+          return <figure key={id} className={critical ? "mosaic-tile mosaic-tile-alert" : "mosaic-tile"} aria-label={`Cámara ${names[id] ?? id}`}>
+            <VideoCanvas frame={view?.frame ?? null} pose={view?.pose ?? null}/>
+            <figcaption><strong>{names[id] ?? id}</strong><span>{monitorTitle(connected, view?.status ?? null)}</span></figcaption>
+          </figure>;
+        })}</div> : <VideoCanvas frame={views[primary]?.frame ?? null} pose={pose}/>}
         <div className="feed-footer"><span><span className="skeleton-key"/>{health?.pose === "mediapipe" ? "Pose MediaPipe" : health ? "Pose sintética" : "Pose"}</span><span>{connected ? "Conectado" : "Desconectado"}</span></div>
       </div>
       <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
-    </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={updateAlert}/></aside></div>
+    </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={updateAlert} names={names}/></aside></div>
   </main>;
 }
 

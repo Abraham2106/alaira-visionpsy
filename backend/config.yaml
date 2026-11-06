@@ -43,3 +43,5 @@ notifications:
   enabled: false
   reminder_seconds: 60
   room_alias: Habitación
+cameras:
+  max: 4 # Una instancia de MediaPipe por cámara; probado con 2 cámaras físicas; 4 solo en benchmark (CPU ~77 % de un núcleo).

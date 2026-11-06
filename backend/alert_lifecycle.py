@@ -30,7 +30,7 @@ def transition(state: AlertState, event: AlertEvent) -> AlertState:
 
 
 class AlertStore:
-    def __init__(self, config: AlertConfig, sink: EventSink, repository=None, kind="fall"):
+    def __init__(self, config: AlertConfig, sink: EventSink, repository=None, kind="fall", camera_id: str | None = None):
         self.config, self.sink = config, sink
         self.history: dict[str, AlertMsg] = {}
         self.active_id: str | None = None
@@ -38,8 +38,11 @@ class AlertStore:
         self._lock = asyncio.Lock()
         self.repository = repository
         self.kind = kind
+        # camera_id restringe un almacén técnico a su cámara; el almacén de caídas es uno por habitación (None).
+        self.camera_id = camera_id
         if repository is not None:
-            self.history = {alert.id: alert for alert in repository.alerts(config.history_size, kind)}
+            self.history = {alert.id: alert for alert in repository.alerts(config.history_size, kind)
+                            if camera_id is None or camera_id in alert.sources}
             self.active_id = next((a.id for a in reversed(list(self.history.values())) if a.state != "RESOLVED"), None)
 
     def snapshot(self) -> list[dict]:
@@ -65,18 +68,30 @@ class AlertStore:
             self.active_id, self.ok_since = None, None
         return result
 
-    async def open(self, assessment: Assessment, now: float) -> AlertMsg | None:
+    async def open(self, assessment: Assessment, now: float, camera_id: str | None = None) -> AlertMsg | None:
         async with self._lock:
             if self.active_id is not None:
                 return None
             while len(self.history) >= self.config.history_size:
                 del self.history[next(iter(self.history))]
-            zones = await asyncio.to_thread(self.repository.zones) if self.repository is not None else None
+            source = camera_id or self.camera_id or "cam-1"
+            zones = await asyncio.to_thread(self.repository.zones, source) if self.repository is not None else None
             alert = AlertMsg(id=uuid.uuid4().hex, timestamp=now, updated_at=now,
-                             level=assessment.level, reasons=list(assessment.reasons), state="OPEN", kind=self.kind, zones=zones)
+                             level=assessment.level, reasons=list(assessment.reasons), state="OPEN", kind=self.kind,
+                             zones=zones, sources=[source])
             result = await self._publish(alert)
             self.active_id, self.ok_since = alert.id, None
             return result
+
+    async def add_source(self, camera_id: str, now: float) -> AlertMsg | None:
+        """Suma una cámara que también ve el incidente a la alerta activa, sin abrir otra ni notificar de nuevo."""
+        async with self._lock:
+            if self.active_id is None:
+                return None
+            alert = self.history[self.active_id]
+            if camera_id in alert.sources:
+                return alert
+            return await self._publish(alert.model_copy(update={"sources": [*alert.sources, camera_id], "updated_at": now}))
 
     async def acknowledge(self, alert_id: str, now: float) -> AlertMsg:
         async with self._lock:
@@ -88,7 +103,7 @@ class AlertStore:
             alert = self.history.get(alert_id)
             if alert is None and self.repository is not None:
                 alert = await asyncio.to_thread(self.repository.alert,alert_id)
-                if alert.kind != self.kind:
+                if alert.kind != self.kind or (self.camera_id is not None and self.camera_id not in alert.sources):
                     raise KeyError(alert_id)
             if alert is None:
                 raise KeyError(alert_id)

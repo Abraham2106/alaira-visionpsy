@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import App from "../src/App";
 
 vi.mock("qrcode",()=>({default:{toDataURL:vi.fn().mockResolvedValue("data:image/png;base64,demo")}}));
-vi.mock("../src/hooks/useMonitor",()=>({useMonitor:()=>({frame:null,pose:null,status:null,health:null,alerts:[],connected:true,error:null,updateAlert:vi.fn()})}));
+vi.mock("../src/hooks/useMonitor",()=>({useMonitor:()=>({views:{},frame:null,pose:null,status:null,health:null,alerts:[],connected:true,error:null,updateAlert:vi.fn()})}));
 vi.mock("../src/hooks/useWebSocket",()=>({useWebSocket:()=>({connected:false,error:null,send:()=>false})}));
 vi.mock("../src/hooks/useCameraCapture",()=>({useCameraCapture:()=>({videoRef:{current:null},captureRef:{current:null},frames:0,resetFrames:vi.fn()})}));
 

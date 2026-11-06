@@ -7,7 +7,9 @@ import { monitorTitle } from "../monitorStatus";
 import VideoCanvas from "./VideoCanvas";
 import { CAPTURE } from "../config";
 import { useCameraCapture, type CaptureMode } from "../hooks/useCameraCapture";
+import { useCameras } from "../hooks/useCameras";
 import { useMonitor } from "../hooks/useMonitor";
+import { DEFAULT_CAMERA } from "../frames";
 import { useWebSocket } from "../hooks/useWebSocket";
 import type { PoseMsg } from "../types";
 
@@ -20,8 +22,11 @@ export default function CameraSender({ token }: { token: string }) {
   const [mode, setMode] = useState<CaptureMode>("camera");
   const [running, setRunning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const ingest = useWebSocket("/ws/ingest", token, undefined, running);
-  const monitor = useMonitor(token, running);
+  const [cameraId, setCameraId] = useState(DEFAULT_CAMERA);
+  const { cameras, names } = useCameras(token);
+  // El servidor asigna cam-1 por defecto; solo se envía camera_id si se elige otra.
+  const ingest = useWebSocket("/ws/ingest", token, undefined, running, cameraId === DEFAULT_CAMERA ? undefined : cameraId);
+  const monitor = useMonitor(token, running, cameraId);
   const fail = useCallback((message: string) => { setCameraError(message); setRunning(false); }, []);
   const { videoRef, captureRef, frames, resetFrames } = useCameraCapture(mode, running, ingest.send, fail);
   const { frame, pose, status, health, alerts } = monitor;
@@ -39,7 +44,7 @@ export default function CameraSender({ token }: { token: string }) {
 
   return <main className="dashboard">
     {error && <p className="error-box" role="alert">{error}</p>}
-    <AlertBanner alerts={alerts}/>
+    <AlertBanner alerts={alerts} names={names}/>
     <div className="monitor-grid"><section className="monitor-main">
       <section className="panel feed-panel">
         <div className="panel-heading"><h2>Cámara</h2><span className="local-indicator">{running && streaming ? "En directo" : statusTitle}</span></div>
@@ -51,6 +56,10 @@ export default function CameraSender({ token }: { token: string }) {
         </div>
         <div className="feed-footer"><span><span className="skeleton-key"/>{poseLabel(pose, health?.synthetic)}</span><span>{frames} frames enviados</span></div>
         <div className="camera-controls">
+          {cameras.length > 1 && <><label className="field-label" htmlFor="capture-camera">Cámara de la habitación</label>
+            <select id="capture-camera" value={cameraId} disabled={running} onChange={(event) => setCameraId(event.target.value)}>
+              {cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}
+            </select></>}
           <label className="field-label" htmlFor="capture-mode">Fuente de imagen</label>
           <select id="capture-mode" value={mode} disabled={running} onChange={(event) => setMode(event.target.value as CaptureMode)}>
             <option value="camera">Cámara de la computadora</option><option value="demo">Demo sintética</option>
@@ -61,6 +70,6 @@ export default function CameraSender({ token }: { token: string }) {
         </div>
       </section>
       <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
-    </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={monitor.updateAlert}/></aside></div>
+    </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={monitor.updateAlert} names={names}/></aside></div>
   </main>;
 }

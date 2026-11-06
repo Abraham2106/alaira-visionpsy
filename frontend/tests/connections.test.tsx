@@ -2,11 +2,12 @@ import {act,renderHook,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {useWebSocket} from "../src/hooks/useWebSocket";
 import {useMonitor} from "../src/hooks/useMonitor";
+import {encodeFrame} from "../src/frames";
 
 class Socket {
   static OPEN=1;
   static instances:Socket[]=[];
-  readyState=0;bufferedAmount=0;
+  readyState=0;bufferedAmount=0;binaryType="blob";
   sent:unknown[]=[];
   onopen:(()=>void)|null=null;
   onmessage:((event:MessageEvent)=>void)|null=null;
@@ -50,20 +51,64 @@ it("reconecta ante corte de transporte y deja de reintentar ante rechazo",async(
   expect(Socket.instances).toHaveLength(2);
 });
 
+const packet=(camera:string,body:string)=>encodeFrame(camera,new TextEncoder().encode(body));
+const poseMsg=(camera:string,timestamp:number)=>JSON.stringify({type:"pose",camera_id:camera,timestamp,landmarks:null});
+const statusMsg=(camera:string,state:string,timestamp:number)=>JSON.stringify({type:"status",camera_id:camera,camera:state,reasons:[],level:"ok",timestamp,model_error:null});
+
 it("no muestra una imagen nueva con la pose anterior y limpia al desconectar",async()=>{
   const {result}=renderHook(()=>useMonitor("token"));
   const socket=Socket.instances[0];
   act(()=>socket.open());
   await waitFor(()=>expect(result.current.connected).toBe(true));
-  const first=new Blob(["first"]),second=new Blob(["second"]);
-  act(()=>socket.message(first));
+  expect(socket.binaryType).toBe("arraybuffer");
+  act(()=>socket.message(packet("cam-1","first")));
   expect(result.current.frame).toBeNull();
-  act(()=>socket.message(JSON.stringify({type:"pose",timestamp:1,landmarks:null})));
-  expect(result.current.frame).toBe(first);
-  act(()=>socket.message(second));
-  expect(result.current.frame).toBe(first);
-  act(()=>socket.message(JSON.stringify({type:"pose",timestamp:2,landmarks:null})));
-  expect(result.current.frame).toBe(second);
-  act(()=>socket.message(JSON.stringify({type:"status",camera:"disconnected",reasons:["camera_disconnected"],level:"ok",timestamp:3,model_error:null})));
+  act(()=>socket.message(poseMsg("cam-1",1)));
+  expect(result.current.frame?.size).toBe(5);
+  act(()=>socket.message(packet("cam-1","second!")));
+  expect(result.current.frame?.size).toBe(5);
+  act(()=>socket.message(poseMsg("cam-1",2)));
+  expect(result.current.frame?.size).toBe(7);
+  act(()=>socket.message(statusMsg("cam-1","disconnected",3)));
   expect(result.current.frame).toBeNull();
+});
+
+it("mantiene vistas independientes por cámara y expone la elegida",async()=>{
+  const {result}=renderHook(()=>useMonitor("token",true,"cam-2"));
+  const socket=Socket.instances[0];
+  act(()=>socket.open());
+  await waitFor(()=>expect(result.current.connected).toBe(true));
+  act(()=>{
+    socket.message(packet("cam-1","uno"));socket.message(poseMsg("cam-1",1));
+    socket.message(packet("cam-2","dos!"));socket.message(poseMsg("cam-2",1));
+  });
+  expect(result.current.views["cam-1"].frame?.size).toBe(3);
+  expect(result.current.views["cam-2"].frame?.size).toBe(4);
+  expect(result.current.frame?.size).toBe(4);
+  // Que una cámara se desconecte no borra la imagen de la otra.
+  act(()=>socket.message(statusMsg("cam-2","disconnected",2)));
+  expect(result.current.frame).toBeNull();
+  expect(result.current.views["cam-1"].frame?.size).toBe(3);
+});
+
+it("rechaza un frame con prefijo inválido sin romper el monitor",async()=>{
+  const {result}=renderHook(()=>useMonitor("token"));
+  const socket=Socket.instances[0];
+  act(()=>socket.open());
+  await waitFor(()=>expect(result.current.connected).toBe(true));
+  act(()=>socket.message(new Uint8Array([9,1,2]).buffer));
+  expect(result.current.error).toMatch(/frame inválido/);
+  act(()=>result.current.clearError());
+  act(()=>socket.message(packet("cam-1","ok")));
+  act(()=>socket.message(poseMsg("cam-1",1)));
+  expect(result.current.frame?.size).toBe(2);
+});
+
+it("envía camera_id en la autenticación solo cuando se indica",()=>{
+  renderHook(()=>useWebSocket("/ws/ingest","token",undefined,true,"cam-2"));
+  renderHook(()=>useWebSocket("/ws/ingest","token"));
+  act(()=>Socket.instances[0].open());
+  act(()=>Socket.instances[1].open());
+  expect(JSON.parse(Socket.instances[0].sent[0] as string)).toMatchObject({type:"auth",camera_id:"cam-2"});
+  expect(JSON.parse(Socket.instances[1].sent[0] as string)).not.toHaveProperty("camera_id");
 });

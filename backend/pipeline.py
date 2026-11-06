@@ -9,6 +9,7 @@ from collections.abc import Callable
 from .alert_lifecycle import AlertStore
 from .config import Settings
 from .interfaces import EventSink, PoseEstimator, VisionModel
+from .consolidator import RoomConsolidator
 from .messages import PoseMsg, StatusMsg
 from .risk import Assessment, assess
 
@@ -21,29 +22,51 @@ class InvalidFrame(ValueError):
 
 class Pipeline:
     def __init__(self, settings: Settings, estimator: PoseEstimator, vision: VisionModel,
-                 sink: EventSink, clock: Callable[[], float] = time.time, *, repository=None):
+                 sink: EventSink, clock: Callable[[], float] = time.time, *, repository=None,
+                 camera_id: str = "cam-1", alerts: AlertStore | None = None, technical: AlertStore | None = None,
+                 room: RoomConsolidator | None = None):
         self.settings, self.estimator, self.vision = settings, estimator, vision
         self.sink, self.clock = sink, clock
+        self.camera_id = camera_id
         self.history = deque(maxlen=settings.pipeline.history_size)
-        self.alerts = AlertStore(settings.alerts, sink, repository=repository)
-        self.technical = AlertStore(settings.alerts, sink, repository=repository, kind="technical")
+        # Almacenes inyectables: la alerta de caídas se comparte por habitación; la técnica es por cámara.
+        self.alerts = alerts or (room.alerts if room is not None else AlertStore(settings.alerts, sink, repository=repository))
+        self.technical = technical or AlertStore(settings.alerts, sink, repository=repository, kind="technical",
+                                                 camera_id=camera_id if room is not None else None)
+        self.room = room
+        if room is not None:
+            room.register(camera_id, self)
         self.last_frame: float | None = None
-        self.last_status = StatusMsg(timestamp=clock(), level="ok", reasons=[], camera="waiting")
-        # ponytail: una cámara por proceso; separar pipelines por cámara al añadir multifuente.
+        self.last_status = StatusMsg(timestamp=clock(), level="ok", reasons=[], camera="waiting", camera_id=camera_id)
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
 
     def snapshot(self):
+        if self.room is not None:
+            return self.room.snapshot()
         return sorted(self.alerts.snapshot()+self.technical.snapshot(),key=lambda item:item["timestamp"])[-100:]
 
     async def act(self,event_id,action,reason,now):
+        if self.room is not None:
+            return await self.room.act(event_id,action,reason,now)
         try:
             return await self.alerts.act(event_id,action,reason,now)
         except KeyError:
             return await self.technical.act(event_id,action,reason,now)
 
+    async def _observe(self, result: Assessment | None, now: float) -> None:
+        if self.room is not None:
+            await self.room.observe(self.camera_id, result, now)
+        else:
+            await self.alerts.observe(result, now)
+
+    async def _critical(self, result: Assessment, now: float):
+        if self.room is not None:
+            return await self.room.critical(self.camera_id, result, now)
+        return await self.alerts.open(result, now, self.camera_id)
+
     async def _status(self, result: Assessment, now: float, camera: str, error: str | None = None) -> None:
-        self.last_status = StatusMsg(timestamp=now, level=result.level, reasons=list(result.reasons),
+        self.last_status = StatusMsg(camera_id=self.camera_id, timestamp=now, level=result.level, reasons=list(result.reasons),
                                      camera=camera, model_error=error)
         await self.sink.emit(self.last_status.model_dump(mode="json"))
 
@@ -59,18 +82,18 @@ class Pipeline:
             await self.technical.recover_technical(ts)
             if self.last_frame is not None and not (0 < ts - self.last_frame <= self.settings.risk.max_pose_gap_seconds):
                 self.history.clear()
-                await self.alerts.observe(None, ts)
+                await self._observe(None, ts)
             self.last_frame = ts
-            await self.sink.emit_frame(jpeg)
+            await self.sink.emit_frame(self.camera_id, jpeg)
             try:
                 pose = await asyncio.to_thread(self.estimator.estimate, jpeg, ts)
-                message = PoseMsg(timestamp=ts, landmarks=None if pose is None else
+                message = PoseMsg(camera_id=self.camera_id, timestamp=ts, landmarks=None if pose is None else
                                   [(point.x, point.y, point.visibility) for point in pose.landmarks])
             except Exception:
                 log.exception("Fallo del estimador de pose")
                 self.history.clear()
-                await self.alerts.observe(None, ts)
-                await self.sink.emit(PoseMsg(timestamp=ts).model_dump(mode="json"))
+                await self._observe(None, ts)
+                await self.sink.emit(PoseMsg(camera_id=self.camera_id, timestamp=ts).model_dump(mode="json"))
                 await self._status(Assessment("ok", ("model_error",)), ts, "streaming", "Fallo del estimador de pose")
                 return
             await self.sink.emit(message.model_dump(mode="json"))
@@ -89,9 +112,9 @@ class Pipeline:
             if capacity_limited:
                 result = Assessment(result.level, (*result.reasons, "insufficient_history"))
             await self._status(result, ts, "streaming")
-            await self.alerts.observe(None if capacity_limited else result, ts)
+            await self._observe(None if capacity_limited else result, ts)
             if result.level == "critical":
-                alert = await self.alerts.open(result, ts)
+                alert = await self._critical(result, ts)
                 if alert is not None:
                     task = asyncio.create_task(self._confirm(alert.id, jpeg))
                     self._tasks.add(task)
@@ -118,11 +141,11 @@ class Pipeline:
         was_streaming = self.last_frame is not None
         self.history.clear()
         self.last_frame = None
-        await self.alerts.observe(None, now)
-        await self.sink.emit(PoseMsg(timestamp=now).model_dump(mode="json"))
+        await self._observe(None, now)
+        await self.sink.emit(PoseMsg(camera_id=self.camera_id, timestamp=now).model_dump(mode="json"))
         await self._status(Assessment("ok", ("camera_disconnected",)), now, "disconnected")
         if was_streaming:
-            await self.technical.open(Assessment("suspect",("camera_disconnected",)),now)
+            await self.technical.open(Assessment("suspect",("camera_disconnected",)),now,self.camera_id)
 
     async def tick(self, now: float | None = None) -> None:
         ts = self.clock() if now is None else now

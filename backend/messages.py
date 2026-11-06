@@ -14,12 +14,14 @@ class Message(BaseModel):
 
 class PoseMsg(Message):
     type: Literal["pose"] = "pose"
+    camera_id: str = "cam-1"
     timestamp: float
     landmarks: list[tuple[float, float, float]] | None = Field(default=None, min_length=33, max_length=33)
 
 
 class StatusMsg(Message):
     type: Literal["status"] = "status"
+    camera_id: str = "cam-1"
     timestamp: float
     level: Level
     reasons: list[str]
@@ -42,7 +44,14 @@ class AlertMsg(Message):
     recovery_at: float | None = None
     kind: Literal["fall", "technical"] = "fall"
     zones: ZonesDocument | None = None
+    sources: list[str] = Field(default_factory=lambda: ["cam-1"])
 
 
-ServerMessage = Annotated[PoseMsg | StatusMsg | AlertMsg, Field(discriminator="type")]
+class CameraStatusMsg(Message):
+    type: Literal["camera_status"] = "camera_status"
+    timestamp: float
+    cameras: list[dict[str, str | int | float | bool | None]]
+
+
+ServerMessage = Annotated[PoseMsg | StatusMsg | AlertMsg | CameraStatusMsg, Field(discriminator="type")]
 MESSAGE_ADAPTER = TypeAdapter(ServerMessage)

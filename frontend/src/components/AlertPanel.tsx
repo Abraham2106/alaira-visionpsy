@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { api } from "../config";
+import { sourceLabel } from "../monitorStatus";
 import { REASONS, type AlertMsg, type AlertState } from "../types";
 
 const STATE_LABEL = { OPEN: "Sin reconocer", ACKNOWLEDGED: "Reconocida", RESOLVED: "Resuelta" };
@@ -16,7 +17,8 @@ function visionText(alert: AlertMsg) {
   return alert.vision ?? "Analizando la imagen…";
 }
 
-function AlertItem({ alert, token, onUpdate }: { alert: AlertMsg; token: string; onUpdate: (alert: AlertMsg) => void }) {
+function AlertItem({ alert, token, onUpdate, names }: { alert: AlertMsg; token: string; onUpdate: (alert: AlertMsg) => void; names?: Record<string, string> }) {
+  const where = sourceLabel(alert, names);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -33,6 +35,7 @@ function AlertItem({ alert, token, onUpdate }: { alert: AlertMsg; token: string;
       </time></div>
     <h3>{alert.state === "OPEN" && <TriangleAlert size={17} aria-hidden="true"/>}{alert.kind==="technical"?"Monitoreo interrumpido":"Posible caída"}</h3>
     <p>{alert.reasons.map((reason) => REASONS[reason] ?? reason).join(" · ")}</p>
+    {where && <p className="alert-sources">Detectada por: {where}</p>}
     <p>{ATTENTION_LABEL[alert.attention ?? "pending"]}</p>
     {alert.kind!=="technical"&&<div className="vision-note"><span className="vision-label">Análisis visual</span><span>{visionText(alert)}</span></div>}
     {alert.event && <p className="event-note">{alert.kind==="technical"&&alert.event==="auto_resolve"?"Señal recuperada":EVENT_LABEL[alert.event]}</p>}
@@ -46,7 +49,7 @@ function AlertItem({ alert, token, onUpdate }: { alert: AlertMsg; token: string;
   </li>;
 }
 
-export default function AlertPanel(props: { alerts: AlertMsg[]; token: string; onUpdate: (alert: AlertMsg) => void }) {
+export default function AlertPanel(props: { alerts: AlertMsg[]; token: string; onUpdate: (alert: AlertMsg) => void; names?: Record<string, string> }) {
   const open = props.alerts.filter((alert) => alert.state === "OPEN").length;
   const ordered = [...props.alerts].sort((left, right) =>
     STATE_ORDER[left.state] - STATE_ORDER[right.state] || right.timestamp - left.timestamp);
@@ -54,7 +57,7 @@ export default function AlertPanel(props: { alerts: AlertMsg[]; token: string; o
     <div className="panel-heading"><h2 id="alerts-heading">Alertas</h2>
       <span className={open ? "count count-alert" : "count"}>{open ? `${open} sin reconocer` : `${props.alerts.length} en sesión`}</span></div>
     {ordered.length ? <ul className="alert-list">{ordered.map((alert) =>
-      <AlertItem key={alert.id} alert={alert} token={props.token} onUpdate={props.onUpdate} />)}</ul>
+      <AlertItem key={alert.id} alert={alert} token={props.token} onUpdate={props.onUpdate} names={props.names} />)}</ul>
       : <div className="alerts-empty"><span className="empty-check" aria-hidden="true">✓</span>
         <h3>Sin alertas por ahora</h3></div>}
   </section>;

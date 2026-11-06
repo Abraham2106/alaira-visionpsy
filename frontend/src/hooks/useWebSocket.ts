@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CAPTURE, wsUrl } from "../config";
 
 export function useWebSocket(path: "/ws/dashboard" | "/ws/ingest", token: string,
-  onMessage?: (event: MessageEvent) => void, enabled = true) {
+  onMessage?: (event: MessageEvent) => void, enabled = true, cameraId?: string) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -19,11 +19,15 @@ export function useWebSocket(path: "/ws/dashboard" | "/ws/ingest", token: string
     let timer: number | undefined;
     setError(null);
     const ws = new WebSocket(wsUrl(path));
+    // Los frames del dashboard llevan prefijo de cámara: ArrayBuffer permite decodificarlo sin esperas.
+    if (path === "/ws/dashboard") ws.binaryType = "arraybuffer";
     socket.current = ws;
     inFlight.current = 0;
     ws.onopen = () => {
       if (stopped) { ws.close(); return; }
-      ws.send(JSON.stringify({ type: "auth", token, flow_control: path === "/ws/ingest" }));
+      // camera_id solo lo respeta el servidor para el token de administrador; una credencial de cámara fija la suya.
+      ws.send(JSON.stringify({ type: "auth", token, flow_control: path === "/ws/ingest",
+        ...(cameraId ? { camera_id: cameraId } : {}) }));
       setConnected(true);
       setError(null);
       attempt.current = 0;
@@ -53,7 +57,7 @@ export function useWebSocket(path: "/ws/dashboard" | "/ws/ingest", token: string
       socket.current = null;
       inFlight.current = 0;
     };
-  }, [path, token, enabled, retry]);
+  }, [path, token, enabled, retry, cameraId]);
 
   const send = useCallback((data: Blob) => {
     const ws = socket.current;

@@ -2,6 +2,7 @@
 .env
 .venv/
 .venv311/
+.venv312/
 __pycache__/
 .pytest_cache/
 node_modules/
@@ -21,3 +22,6 @@ reports/
 tests/test_frontend.md
 scripts/export_scaffold.py
 scripts/update_wbs_progress.py
+
+# Planes de trabajo para asistentes: permanecen locales.
+CURSOR_PLAN.md

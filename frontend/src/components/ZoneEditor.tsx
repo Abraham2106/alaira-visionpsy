@@ -2,13 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Undo2, Save } from "lucide-react";
 import { api } from "../config";
 import { imagePoint } from "../geometry";
+import { DEFAULT_CAMERA } from "../frames";
+import { useCameras } from "../hooks/useCameras";
 import { useMonitor } from "../hooks/useMonitor";
 
 interface Zone { id:string; name:string; kind:"bed"|"chair"|"other"; polygon:[number,number][] }
 interface Document { revision:number; zones:Zone[] }
 
 export default function ZoneEditor({token}:{token:string}) {
-  const monitor=useMonitor(token);
+  const [cameraId,setCameraId]=useState(DEFAULT_CAMERA);
+  const {cameras}=useCameras(token);
+  const monitor=useMonitor(token,true,cameraId);
+  // cam-1 conserva la ruta histórica; las demás cámaras llevan su id.
+  const zonesPath=cameraId===DEFAULT_CAMERA?"/zones":`/zones?camera_id=${encodeURIComponent(cameraId)}`;
   const [document,setDocument]=useState<Document>({revision:0,zones:[]});
   const [selected,setSelected]=useState<string|null>(null);
   const [points,setPoints]=useState<[number,number][]>([]);
@@ -27,9 +33,9 @@ export default function ZoneEditor({token}:{token:string}) {
 
   useEffect(()=>{
     let cancelled=false;
-    api<Document>("/zones",token).then(data=>{if(!cancelled)setDocument(data);}).catch(()=>{if(!cancelled)setError("No se pudieron cargar las zonas.");});
+    api<Document>(zonesPath,token).then(data=>{if(!cancelled)setDocument(data);}).catch(()=>{if(!cancelled)setError("No se pudieron cargar las zonas.");});
     return ()=>{cancelled=true;};
-  },[token]);
+  },[token,zonesPath]);
   useEffect(()=>{
     if (heldFrame.current || !monitor.frame) return;
     heldFrame.current=monitor.frame;
@@ -39,6 +45,10 @@ export default function ZoneEditor({token}:{token:string}) {
   },[monitor.frame]);
   useEffect(()=>()=>{if(source)URL.revokeObjectURL(source);},[source]);
 
+  function changeCamera(id:string) {
+    saveVersion.current++;heldFrame.current=null;setSource(null);setDocument({revision:0,zones:[]});setError(null);setPending(false);
+    reset();setCameraId(id);
+  }
   function reset() {setSelected(null);setPoints([]);setCoordinates("");setName("Cama");setKind("bed");setNotice("");}
   function choose(zone:Zone) {setSelected(zone.id);setPoints(zone.polygon);setCoordinates(zone.polygon.map(p=>p.join(",")).join("\n"));setName(zone.name);setKind(zone.kind);setNotice("");}
   async function save(remove=false) {
@@ -47,7 +57,7 @@ export default function ZoneEditor({token}:{token:string}) {
     const id=selected ?? crypto.randomUUID();
     const zones=document.zones.filter(z=>z.id!==id);
     if(!remove) zones.push({id,name:name.trim(),kind,polygon:points});
-    try {const saved=await api<Document>("/zones",token,"PUT",{revision:document.revision,zones});if(version!==saveVersion.current)return;setDocument(saved);reset();setNotice("Zonas guardadas");}
+    try {const saved=await api<Document>(zonesPath,token,"PUT",{revision:document.revision,zones});if(version!==saveVersion.current)return;setDocument(saved);reset();setNotice("Zonas guardadas");}
     catch {if(version===saveVersion.current)setError("No se pudo guardar. Comprueba el polígono; si otra sesión modificó las zonas, recarga.");}
     finally {if(version===saveVersion.current)setPending(false);}
   }
@@ -67,6 +77,8 @@ export default function ZoneEditor({token}:{token:string}) {
         </svg>}
       </div>
       <div className="settings-body">
+        {cameras.length>1&&<><label htmlFor="zone-camera">Cámara</label><select id="zone-camera" value={cameraId} disabled={pending} onChange={e=>changeCamera(e.target.value)}>
+          {cameras.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></>}
         <p className="small-note">Marca al menos tres puntos. La cámara debe permanecer fija.</p>
         <label htmlFor="zone-name">Nombre</label><input id="zone-name" value={name} maxLength={80} onChange={e=>setName(e.target.value)}/>
         <label htmlFor="zone-kind">Tipo</label><select id="zone-kind" value={kind} onChange={e=>setKind(e.target.value as Zone["kind"])}><option value="bed">Cama</option><option value="chair">Silla</option><option value="other">Otra</option></select>

@@ -11,17 +11,19 @@ from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .alert_lifecycle import IllegalTransition
+from .alert_lifecycle import AlertStore, IllegalTransition
+from .consolidator import RoomConsolidator
 from .config import Settings, load_settings
 from .model_loader import ModelLoadError, load_pose_estimator, load_vision_model
 from .pipeline import Pipeline
 from .domain import EventAction, Zone, ZonesDocument
-from .storage import Repository, RevisionConflict
+from .storage import DEFAULT_CAMERA, Repository, RevisionConflict
 from .notifications import NotificationWorker
 from .ws_handler import ConnectionManager, authenticate, handle_dashboard, handle_ingest
 
 
-def create_app(settings: Settings | None = None, *, estimator=None, vision=None, clock=time.time) -> FastAPI:
+def create_app(settings: Settings | None = None, *, estimator=None, vision=None, clock=time.time,
+               estimator_factory=None) -> FastAPI:
     settings = settings or load_settings()
     security = HTTPBearer(auto_error=False)
 
@@ -49,18 +51,41 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
             repository = Repository(current.storage.path)
             resources.callback(repository.close)
             await asyncio.to_thread(repository.prune, clock(), current.storage.retention_days)
-            document = repository.zones()
-            if document.revision == 0 and current.risk.safe_zones:
-                document = repository.replace_zones(ZonesDocument(zones=[
-                    Zone(id=f"zone-{i}", name=f"Zona {i+1}", polygon=p) for i,p in enumerate(current.risk.safe_zones)]))
-            if document.revision:
-                current = current.model_copy(update={"risk":current.risk.model_copy(update={"safe_zones":[z.polygon for z in document.zones]})})
-                app.state.settings = current
             manager = ConnectionManager(current.server.send_timeout_seconds)
-            pipeline = Pipeline(current, pose_model, vision_model, manager, clock, repository=repository)
-            app.state.manager, app.state.pipeline = manager, pipeline
+            room = RoomConsolidator(AlertStore(current.alerts, manager, repository=repository),
+                                    stale_seconds=current.risk.max_pose_gap_seconds)
+            pipelines: dict[str, Pipeline] = {}
+            estimators: dict[str, object] = {}
+            seed = repository.zones(DEFAULT_CAMERA)
+            if seed.revision == 0 and current.risk.safe_zones:
+                repository.replace_zones(ZonesDocument(zones=[
+                    Zone(id=f"zone-{i}", name=f"Zona {i+1}", polygon=p) for i,p in enumerate(current.risk.safe_zones)]), DEFAULT_CAMERA)
+
+            def build_pipeline(camera_id: str, model) -> Pipeline:
+                document = repository.zones(camera_id)
+                camera_settings = current
+                if document.revision:
+                    camera_settings = current.model_copy(update={"risk":current.risk.model_copy(
+                        update={"safe_zones":[z.polygon for z in document.zones]})})
+                estimators[camera_id] = model
+                pipelines[camera_id] = Pipeline(camera_settings, model, vision_model, manager, clock,
+                                                repository=repository, camera_id=camera_id, room=room)
+                return pipelines[camera_id]
+
+            def new_estimator():
+                return estimator_factory() if estimator_factory is not None else load_pose_estimator(current)
+
+            for index, camera in enumerate(repository.cameras()):
+                model = pose_model if index == 0 else new_estimator()
+                build_pipeline(camera["id"], model)
+            if DEFAULT_CAMERA not in pipelines:
+                raise RuntimeError("Falta la cámara principal cam-1")
+            app.state.settings = current
+            app.state.manager, app.state.pipelines, app.state.room = manager, pipelines, room
+            app.state.pipeline = pipelines[DEFAULT_CAMERA]
             app.state.repository = repository
-            worker = NotificationWorker(repository, pipeline, current.notifications, clock=clock)
+            app.state.build_pipeline, app.state.new_estimator, app.state.estimators = build_pipeline, new_estimator, estimators
+            worker = NotificationWorker(repository, room, current.notifications, clock=clock)
             app.state.notifier = worker
             notification_task = None
             if current.notifications.enabled:
@@ -70,11 +95,21 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
                 maintenance_at = clock()
                 while True:
                     await asyncio.sleep(current.server.tick_seconds)
-                    await pipeline.tick()
+                    for pipeline in tuple(pipelines.values()):
+                        await pipeline.tick()
                     if clock() - maintenance_at >= 60:
-                        await pipeline.alerts.prune(clock(), current.storage.retention_days)
-                        await pipeline.technical.prune(clock(), current.storage.retention_days)
+                        await room.alerts.prune(clock(), current.storage.retention_days)
+                        for pipeline in tuple(pipelines.values()):
+                            await pipeline.technical.prune(clock(), current.storage.retention_days)
                         maintenance_at = clock()
+
+            async def close_extra_estimators():
+                # cam-1 la cierra el AsyncExitStack; las demás se crean y se retiran en caliente.
+                for camera_id, model in tuple(estimators.items()):
+                    close = getattr(model, "close", None)
+                    if camera_id != DEFAULT_CAMERA and close is not None:
+                        await asyncio.to_thread(close)
+            resources.push_async_callback(close_extra_estimators)
 
             task = asyncio.create_task(ticker())
             try:
@@ -85,7 +120,8 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
                     notification_task.cancel()
                     await asyncio.gather(notification_task, return_exceptions=True)
                 await asyncio.gather(task, return_exceptions=True)
-                await pipeline.close()
+                for pipeline in tuple(pipelines.values()):
+                    await pipeline.close()
 
     app = FastAPI(title="VisionPsy-Local", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     async def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
@@ -105,28 +141,96 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
     async def alerts(limit: int = Query(default=50,ge=1,le=200)):
         return await asyncio.to_thread(app.state.repository.alerts,limit)
 
+    def known_pipeline(camera_id: str) -> Pipeline:
+        pipeline = app.state.pipelines.get(camera_id)
+        if pipeline is None:
+            raise HTTPException(404, "Cámara no encontrada")
+        return pipeline
+
     @app.get("/zones", dependencies=[Depends(require_token)])
-    async def zones():
-        return app.state.repository.zones()
+    async def zones(camera_id: str = Query(default=DEFAULT_CAMERA)):
+        known_pipeline(camera_id)
+        return app.state.repository.zones(camera_id)
 
     @app.put("/zones", dependencies=[Depends(require_token)])
-    async def replace_zones(document: ZonesDocument):
-        pipeline = app.state.pipeline
+    async def replace_zones(document: ZonesDocument, camera_id: str = Query(default=DEFAULT_CAMERA)):
+        pipeline = known_pipeline(camera_id)
         async with pipeline._lock:
             try:
-                updated = await asyncio.to_thread(app.state.repository.replace_zones, document)
+                updated = await asyncio.to_thread(app.state.repository.replace_zones, document, camera_id)
             except RevisionConflict as error:
                 raise HTTPException(409, str(error)) from error
             pipeline.settings = pipeline.settings.model_copy(update={"risk":pipeline.settings.risk.model_copy(
                 update={"safe_zones":[z.polygon for z in updated.zones]})})
             pipeline.history.clear()
-            await pipeline.alerts.observe(None, clock())
+            await pipeline._observe(None, clock())
             return updated
+
+    def camera_view(row):
+        pipeline = app.state.pipelines.get(row["id"])
+        return {"id":row["id"],"name":row["name"],
+                "state":pipeline.last_status.camera if pipeline else "waiting",
+                "connected":row["id"] in app.state.manager.producers}
+
+    class CameraCreate(BaseModel):
+        name: str = Field(min_length=1, max_length=80)
+        id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,32}$")
+
+    class CameraRename(BaseModel):
+        name: str = Field(min_length=1, max_length=80)
+
+    @app.get("/cameras", dependencies=[Depends(require_token)])
+    async def cameras():
+        return [camera_view(row) for row in app.state.repository.cameras()]
+
+    @app.post("/cameras", dependencies=[Depends(require_token)], status_code=201)
+    async def create_camera(body: CameraCreate):
+        repository = app.state.repository
+        existing = {row["id"] for row in repository.cameras()}
+        if len(existing) >= app.state.settings.cameras.max:
+            raise HTTPException(409, f"Máximo de {app.state.settings.cameras.max} cámaras")
+        camera_id = body.id or next(f"cam-{n}" for n in range(1, 100) if f"cam-{n}" not in existing)
+        try:
+            row = repository.add_camera(camera_id, body.name, clock())
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        model = await asyncio.to_thread(app.state.new_estimator)
+        app.state.build_pipeline(camera_id, model)
+        return camera_view(row)
+
+    @app.patch("/cameras/{camera_id}", dependencies=[Depends(require_token)])
+    async def rename_camera(camera_id: str, body: CameraRename):
+        try:
+            return camera_view(app.state.repository.rename_camera(camera_id, body.name))
+        except (KeyError, ValueError) as error:
+            raise HTTPException(404, "Cámara no encontrada") from error
+
+    @app.delete("/cameras/{camera_id}", dependencies=[Depends(require_token)])
+    async def delete_camera(camera_id: str):
+        try:
+            app.state.repository.remove_camera(camera_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        except KeyError as error:
+            raise HTTPException(404, "Cámara no encontrada") from error
+        producer = app.state.manager.producers.get(camera_id)
+        if producer:
+            await producer.close(code=1008, reason="Cámara eliminada")
+        pipeline = app.state.pipelines.pop(camera_id, None)
+        model = app.state.estimators.pop(camera_id, None)
+        app.state.room.pipelines.pop(camera_id, None)
+        app.state.room.latest.pop(camera_id, None)
+        if pipeline:
+            await pipeline.close()
+        close = getattr(model, "close", None)
+        if close is not None:
+            await asyncio.to_thread(close)
+        return {"ok":True}
 
     @app.post("/alerts/{alert_id}/action", dependencies=[Depends(require_token)])
     async def event_action(alert_id: str, body: EventAction):
         try:
-            return await app.state.pipeline.act(alert_id, body.action, body.reason, clock())
+            return await app.state.room.act(alert_id, body.action, body.reason, clock())
         except KeyError as error:
             raise HTTPException(404,"Evento no encontrado") from error
         except IllegalTransition as error:
@@ -150,10 +254,16 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
         app.state.repository.revoke_contact(chat_id)
         return {"ok":True}
 
+    def camera_purpose(camera_id: str) -> str:
+        return "camera" if camera_id == DEFAULT_CAMERA else f"camera:{camera_id}"
+
     @app.post("/pairing/{purpose}", dependencies=[Depends(require_token)])
-    async def pairing(purpose: str):
+    async def pairing(purpose: str, camera_id: str = Query(default=DEFAULT_CAMERA)):
         if purpose not in {"camera","telegram","telegram_backup"}:
             raise HTTPException(404,"Tipo de vinculación desconocido")
+        if purpose == "camera":
+            known_pipeline(camera_id)
+            purpose = camera_purpose(camera_id)
         return app.state.repository.issue_code(purpose,clock())
 
     attempts = defaultdict(deque)
@@ -176,21 +286,30 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
         if len(bucket)>=5:
             raise HTTPException(429,"Espera un minuto antes de reintentar")
         bucket.append(now)
-        if not app.state.repository.consume_code(body.code,"camera",clock()):
+        repository = app.state.repository
+        # El código identifica a qué cámara se vincula el teléfono; la credencial lo hereda.
+        camera_id = next((row["id"] for row in repository.cameras()
+                          if repository.consume_code(body.code, camera_purpose(row["id"]), clock())), None)
+        if camera_id is None:
             raise HTTPException(403,"Código inválido o vencido")
-        return {"token":app.state.repository.camera_credential(clock())}
+        return {"token":repository.camera_credential(clock(), camera_id),"camera_id":camera_id}
 
     @app.delete("/camera/pair", dependencies=[Depends(require_token)])
-    async def revoke_camera():
-        app.state.repository.revoke_camera()
-        if app.state.manager.producer:
-            await app.state.manager.producer.close(code=1008,reason="Cámara desvinculada")
+    async def revoke_camera(camera_id: str | None = Query(default=None)):
+        if camera_id is not None:
+            known_pipeline(camera_id)
+        app.state.repository.revoke_camera(camera_id)
+        targets = list(app.state.manager.producers) if camera_id is None else [camera_id]
+        for target in targets:
+            producer = app.state.manager.producers.get(target)
+            if producer:
+                await producer.close(code=1008,reason="Cámara desvinculada")
         return {"ok":True}
 
     @app.post("/alerts/{alert_id}/ack", dependencies=[Depends(require_token)])
     async def acknowledge(alert_id: str):
         try:
-            alert = await app.state.pipeline.alerts.acknowledge(alert_id, clock())
+            alert = await app.state.room.acknowledge(alert_id, clock())
             return alert.model_dump(mode="json")
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Alerta no encontrada") from error
@@ -200,14 +319,14 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
     @app.websocket("/ws/dashboard")
     async def dashboard(ws: WebSocket):
         if await authenticate(ws, app.state.settings):
-            await handle_dashboard(ws, app.state.manager, app.state.pipeline)
+            await handle_dashboard(ws, app.state.manager, app.state.pipelines)
 
     @app.websocket("/ws/ingest")
     async def ingest(ws: WebSocket):
         if await authenticate(ws, app.state.settings, app.state.repository.camera_authorized):
-            await handle_ingest(ws, app.state.manager, app.state.pipeline)
+            await handle_ingest(ws, app.state.manager, app.state.pipelines)
 
-    app.add_middleware(CORSMiddleware, allow_origins=settings.server.allowed_origins, allow_methods=["GET", "POST", "PUT", "DELETE"],
+    app.add_middleware(CORSMiddleware, allow_origins=settings.server.allowed_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
     return app
 
