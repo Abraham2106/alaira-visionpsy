@@ -1,6 +1,7 @@
 """Repositorio SQLite: eventos, zonas, contactos y outbox en transacciones locales."""
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 import threading
@@ -12,6 +13,14 @@ from .messages import AlertMsg
 
 class RevisionConflict(ValueError):
     pass
+
+
+DEFAULT_CAMERA = "cam-1"
+CAMERA_ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+
+def valid_camera_id(camera_id):
+    return isinstance(camera_id, str) and CAMERA_ID.fullmatch(camera_id) is not None
 
 
 class Repository:
@@ -36,7 +45,15 @@ class Repository:
             CREATE TABLE IF NOT EXISTS codes(digest TEXT PRIMARY KEY, purpose TEXT NOT NULL, expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS credentials(digest TEXT PRIMARY KEY, created REAL NOT NULL, revoked INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS cameras(id TEXT PRIMARY KEY, name TEXT NOT NULL, created REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1);
+            CREATE TABLE IF NOT EXISTS camera_zones(camera_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
         """)
+        if "camera_id" not in {row["name"] for row in self.db.execute("PRAGMA table_info(credentials)")}:
+            self.db.execute("ALTER TABLE credentials ADD COLUMN camera_id TEXT NOT NULL DEFAULT 'cam-1'")
+        # Migración idempotente: la cámara por defecto siempre existe y hereda las zonas del singleton anterior.
+        self.db.execute("INSERT OR IGNORE INTO cameras(id,name,created,active) VALUES(?,?,0,1)",(DEFAULT_CAMERA,"Cámara 1"))
+        self.db.execute("INSERT OR IGNORE INTO camera_zones(camera_id,payload) SELECT ?,payload FROM zones WHERE singleton=1",(DEFAULT_CAMERA,))
+        self.db.commit()
         if "role" not in {row["name"] for row in self.db.execute("PRAGMA table_info(contacts)")}:
             self.db.execute("ALTER TABLE contacts ADD COLUMN role TEXT NOT NULL DEFAULT 'primary'")
             self.db.commit()
@@ -77,19 +94,59 @@ class Repository:
         with self.lock:
             return [dict(r) for r in self.db.execute("SELECT action,reason,at FROM actions WHERE event_id=? ORDER BY id",(event_id,))]
 
-    def zones(self):
+    def zones(self, camera_id=DEFAULT_CAMERA):
         with self.lock:
-            row=self.db.execute("SELECT payload FROM zones WHERE singleton=1").fetchone()
+            row=self.db.execute("SELECT payload FROM camera_zones WHERE camera_id=?",(camera_id,)).fetchone()
             return ZonesDocument.model_validate_json(row[0]) if row else ZonesDocument()
 
-    def replace_zones(self, document):
+    def replace_zones(self, document, camera_id=DEFAULT_CAMERA):
         with self.lock, self.db:
-            current=self.zones()
+            current=self.zones(camera_id)
             if current.revision != document.revision:
                 raise RevisionConflict("Las zonas cambiaron. Recarga antes de guardar.")
             updated=document.model_copy(update={"revision":current.revision+1})
-            self.db.execute("INSERT INTO zones VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET payload=excluded.payload",(updated.model_dump_json(),))
+            self.db.execute("INSERT INTO camera_zones VALUES(?,?) ON CONFLICT(camera_id) DO UPDATE SET payload=excluded.payload",(camera_id,updated.model_dump_json()))
             return updated
+
+    def cameras(self):
+        with self.lock:
+            return [dict(r) for r in self.db.execute("SELECT id,name,created,active FROM cameras ORDER BY rowid")]
+
+    def camera(self, camera_id):
+        with self.lock:
+            row=self.db.execute("SELECT id,name,created,active FROM cameras WHERE id=?",(camera_id,)).fetchone()
+            return dict(row) if row else None
+
+    def add_camera(self, camera_id, name, now=0):
+        if not valid_camera_id(camera_id):
+            raise ValueError("Identificador de cámara no válido")
+        name=(name or "").strip()[:80]
+        if not name:
+            raise ValueError("Escribe un nombre para la cámara")
+        with self.lock, self.db:
+            if self.db.execute("SELECT 1 FROM cameras WHERE id=?",(camera_id,)).fetchone():
+                raise ValueError("La cámara ya existe")
+            self.db.execute("INSERT INTO cameras(id,name,created,active) VALUES(?,?,?,1)",(camera_id,name,now))
+        return self.camera(camera_id)
+
+    def rename_camera(self, camera_id, name):
+        name=(name or "").strip()[:80]
+        if not name:
+            raise ValueError("Escribe un nombre para la cámara")
+        with self.lock, self.db:
+            if self.db.execute("UPDATE cameras SET name=? WHERE id=?",(name,camera_id)).rowcount != 1:
+                raise KeyError(camera_id)
+        return self.camera(camera_id)
+
+    def remove_camera(self, camera_id):
+        if camera_id == DEFAULT_CAMERA:
+            raise ValueError("La cámara principal no se puede eliminar")
+        with self.lock, self.db:
+            if self.db.execute("DELETE FROM cameras WHERE id=?",(camera_id,)).rowcount != 1:
+                raise KeyError(camera_id)
+            self.db.execute("UPDATE credentials SET revoked=1 WHERE camera_id=?",(camera_id,))
+            self.db.execute("DELETE FROM camera_zones WHERE camera_id=?",(camera_id,))
+            self.db.execute("DELETE FROM codes WHERE purpose=?",(f"camera:{camera_id}",))
 
     def contacts(self):
         with self.lock:
@@ -125,20 +182,28 @@ class Repository:
             result=self.db.execute("UPDATE codes SET used=1 WHERE digest=? AND purpose=? AND expires>? AND used=0",(self.digest(code),purpose,now))
             return result.rowcount == 1
 
-    def camera_credential(self, now):
+    def camera_credential(self, now, camera_id=DEFAULT_CAMERA):
         token=secrets.token_urlsafe(32)
         with self.lock, self.db:
-            self.db.execute("UPDATE credentials SET revoked=1")
-            self.db.execute("INSERT INTO credentials VALUES(?,?,0)",(self.digest(token),now))
+            if self.db.execute("SELECT 1 FROM cameras WHERE id=?",(camera_id,)).fetchone() is None:
+                raise KeyError(camera_id)
+            # Una credencial vigente por cámara: vincular de nuevo revoca solo la de esa cámara.
+            self.db.execute("UPDATE credentials SET revoked=1 WHERE camera_id=?",(camera_id,))
+            self.db.execute("INSERT INTO credentials(digest,created,revoked,camera_id) VALUES(?,?,0,?)",(self.digest(token),now,camera_id))
         return token
 
     def camera_authorized(self, token):
+        """Devuelve el camera_id dueño de la credencial vigente, o None."""
         with self.lock:
-            return self.db.execute("SELECT 1 FROM credentials WHERE digest=? AND revoked=0",(self.digest(token),)).fetchone() is not None
+            row=self.db.execute("SELECT c.camera_id FROM credentials c JOIN cameras m ON m.id=c.camera_id WHERE c.digest=? AND c.revoked=0 AND m.active=1",(self.digest(token),)).fetchone()
+            return row[0] if row else None
 
-    def revoke_camera(self):
+    def revoke_camera(self, camera_id=None):
         with self.lock, self.db:
-            self.db.execute("UPDATE credentials SET revoked=1")
+            if camera_id is None:
+                self.db.execute("UPDATE credentials SET revoked=1")
+            else:
+                self.db.execute("UPDATE credentials SET revoked=1 WHERE camera_id=?",(camera_id,))
 
     def meta(self, key, default="0"):
         with self.lock:

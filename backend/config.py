@@ -112,6 +112,10 @@ class NotificationConfig(ConfigModel):
     room_alias: str = Field(default="Habitación", min_length=1, max_length=80)
 
 
+class CamerasConfig(ConfigModel):
+    max: int = Field(default=4, ge=1, le=8)
+
+
 class Settings(ConfigModel):
     token: str = Field(min_length=1, repr=False)
     server: ServerConfig = Field(default_factory=ServerConfig)
@@ -122,6 +126,7 @@ class Settings(ConfigModel):
     privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     notifications: NotificationConfig = Field(default_factory=NotificationConfig)
+    cameras: CamerasConfig = Field(default_factory=CamerasConfig)
 
     @field_validator("token")
     @classmethod

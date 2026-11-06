@@ -43,3 +43,5 @@ notifications:
   enabled: false
   reminder_seconds: 60
   room_alias: Habitación
+cameras:
+  max: 4 # Una instancia de MediaPipe por cámara; 2 es lo validado, 4 requiere medir CPU.

@@ -37,5 +37,5 @@ class EventSink(Protocol):
     async def emit(self, message: dict) -> None:
         """Entrega un mensaje JSON a los consumidores."""
 
-    async def emit_frame(self, jpeg: bytes) -> None:
+    async def emit_frame(self, camera_id: str, jpeg: bytes) -> None:
         """Entrega un JPEG en memoria a los consumidores."""

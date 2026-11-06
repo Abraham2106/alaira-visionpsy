@@ -4,11 +4,13 @@ export type AlertState = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 export type CameraState = "waiting" | "streaming" | "disconnected";
 export interface PoseMsg {
   type: "pose";
+  camera_id: string;
   timestamp: number;
   landmarks: [number, number, number][] | null;
 }
 export interface StatusMsg {
   type: "status";
+  camera_id: string;
   timestamp: number;
   level: Level;
   reasons: string[];
@@ -29,9 +31,17 @@ export interface AlertMsg {
   attention: "pending" | "attending" | "discarded" | "closed" | "expired";
   recovery_at: number | null;
   kind: "fall" | "technical";
+  sources: string[];
   zones: { revision: number; zones: { id: string; name: string; kind: "bed" | "chair" | "other"; polygon: [number, number][] }[] } | null;
 }
-export type ServerMsg = PoseMsg | StatusMsg | AlertMsg;
+export interface CameraStatusMsg {
+  type: "camera_status";
+  timestamp: number;
+  cameras: Record<string, string | number | boolean | null>[];
+}
+export type ServerMsg = PoseMsg | StatusMsg | AlertMsg | CameraStatusMsg;
+// Respuesta de GET /cameras (REST); no forma parte del contrato WebSocket.
+export interface CameraInfo { id: string; name: string; state: CameraState; connected: boolean }
 export interface Health {
   status: "ok";
   name: "VisionPsy-Local";

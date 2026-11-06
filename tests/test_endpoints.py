@@ -70,7 +70,7 @@ def test_ws_frame_pose_status_and_camera_disconnect(settings, jpeg):
         with client.websocket_connect("/ws/ingest") as ingest:
             authenticate(ingest, settings)
             ingest.send_bytes(jpeg)
-            assert dash.receive_bytes() == jpeg
+            assert dash.receive_bytes() == b"cam-1" + jpeg
             assert len(dash.receive_json()["landmarks"]) == 33
             assert dash.receive_json()["level"] == "ok"
         assert dash.receive_json()["landmarks"] is None
@@ -91,7 +91,7 @@ def test_alert_ack_vision_dedupe_auto_resolve_and_replay(settings, jpeg):
             for index in range(4):
                 now[0] = 1000 + index * 0.2
                 ingest.send_bytes(jpeg)
-                assert dash.receive_bytes() == jpeg
+                assert dash.receive_bytes() == b"cam-1" + jpeg
                 assert dash.receive_json()["type"] == "pose"
                 dash.receive_json()
                 if index == 2:
@@ -202,7 +202,7 @@ def test_pose_is_closed_on_partial_startup_and_normal_shutdown(settings,monkeypa
     monkeypatch.setattr(Repository,"close",close_repository)
     def fail_vision(_):
         raise ModelLoadError("synthetic vision startup failure")
-    def fail_zones(_):
+    def fail_zones(*_):
         raise RuntimeError("synthetic zone startup failure")
     if failure=="vision":
         monkeypatch.setattr("backend.main.load_vision_model",fail_vision)
@@ -233,7 +233,7 @@ def test_async_vision_lifecycle_cleans_up_even_on_startup_failure(settings, monk
         async def aclose(self):
             calls.append("close")
     if failure == "zones":
-        def fail_zones(_):
+        def fail_zones(*_):
             raise RuntimeError("synthetic startup failure")
         monkeypatch.setattr(Repository, "zones", fail_zones)
     app = create_app(settings, vision=Vision())

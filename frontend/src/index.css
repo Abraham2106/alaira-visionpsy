@@ -177,3 +177,10 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .history-layout { max-width:780px; margin:auto; }
 .history-layout .alert-list { max-height:none; }
 @media(max-width:760px) { .settings-grid { grid-template-columns:1fr; } .sidebar { flex-wrap:wrap; } .sidebar nav { flex-wrap:wrap; } }
+
+/* Mosaico de cámaras: una baldosa por cámara, la que tiene una caída se resalta. */
+.video-mosaic { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.mosaic-tile { margin: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: var(--surface, #fff); }
+.mosaic-tile-alert { border-color: #c0392b; }
+.mosaic-tile figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: .85rem; }
+.alert-sources { font-size: .85rem; opacity: .8; }

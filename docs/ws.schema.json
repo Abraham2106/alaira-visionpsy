@@ -132,6 +132,13 @@
             }
           ],
           "default": null
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
         }
       },
       "required": [
@@ -145,6 +152,53 @@
       "title": "AlertMsg",
       "type": "object"
     },
+    "CameraStatusMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "camera_status",
+          "default": "camera_status",
+          "title": "Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "number"
+        },
+        "cameras": {
+          "items": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "title": "Cameras",
+          "type": "array"
+        }
+      },
+      "required": [
+        "timestamp",
+        "cameras"
+      ],
+      "title": "CameraStatusMsg",
+      "type": "object"
+    },
     "PoseMsg": {
       "additionalProperties": false,
       "properties": {
@@ -152,6 +206,11 @@
           "const": "pose",
           "default": "pose",
           "title": "Type",
+          "type": "string"
+        },
+        "camera_id": {
+          "default": "cam-1",
+          "title": "Camera Id",
           "type": "string"
         },
         "timestamp": {
@@ -202,6 +261,11 @@
           "const": "status",
           "default": "status",
           "title": "Type",
+          "type": "string"
+        },
+        "camera_id": {
+          "default": "cam-1",
+          "title": "Camera Id",
           "type": "string"
         },
         "timestamp": {
@@ -332,6 +396,7 @@
   "discriminator": {
     "mapping": {
       "alert": "#/$defs/AlertMsg",
+      "camera_status": "#/$defs/CameraStatusMsg",
       "pose": "#/$defs/PoseMsg",
       "status": "#/$defs/StatusMsg"
     },
@@ -346,6 +411,9 @@
     },
     {
       "$ref": "#/$defs/AlertMsg"
+    },
+    {
+      "$ref": "#/$defs/CameraStatusMsg"
     }
   ]
 }

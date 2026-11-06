@@ -25,10 +25,15 @@ it("vincula un respaldo con un código de alcance propio",async()=>{
   expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url).includes("/pairing/telegram_backup")&&init?.method==="POST")).toBe(true);
 });
 
+// Las pantallas consultan /cameras además de /zones: el mock enruta por URL en vez de por orden.
+function zonesApi(loaded:unknown,saved:unknown) {
+  vi.mocked(fetch).mockImplementation(async(input,init)=>new Response(JSON.stringify(
+    String(input).includes("/cameras")?[]:init?.method==="PUT"?saved:loaded)));
+}
+
 it("guarda una zona con coordenadas normalizadas y revisión",async()=>{
   const request=vi.mocked(fetch);
-  request.mockResolvedValueOnce(new Response(JSON.stringify({revision:0,zones:[]})));
-  request.mockResolvedValueOnce(new Response(JSON.stringify({revision:1,zones:[{id:"bed",name:"Cama",kind:"bed",polygon:[[.1,.1],[.8,.1],[.8,.8]]}]})));
+  zonesApi({revision:0,zones:[]},{revision:1,zones:[{id:"bed",name:"Cama",kind:"bed",polygon:[[.1,.1],[.8,.1],[.8,.8]]}]});
   render(<ZoneEditor token="test-token"/>);
   await screen.findByText("Sin zonas");
   fireEvent.change(screen.getByLabelText("Coordenadas de la zona"),{target:{value:"0.1,0.1\n0.8,0.1\n0.8,0.8"}});
@@ -44,8 +49,7 @@ it("guarda una zona con coordenadas normalizadas y revisión",async()=>{
 
 it("edita, deshace y elimina una zona guardada sin reutilizar coordenadas viejas",async()=>{
   const polygon=[[.1,.1],[.8,.1],[.8,.8],[.1,.8]];
-  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({revision:4,zones:[{id:"bed",name:"Cama guardada",kind:"bed",polygon}]})));
-  vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({revision:5,zones:[]})));
+  zonesApi({revision:4,zones:[{id:"bed",name:"Cama guardada",kind:"bed",polygon}]},{revision:5,zones:[]});
   render(<ZoneEditor token="test-token"/>);
   fireEvent.click(await screen.findByRole("button",{name:"Cama guardada"}));
   expect(screen.getByLabelText("Coordenadas de la zona")).toHaveValue("0.1,0.1\n0.8,0.1\n0.8,0.8\n0.1,0.8");
@@ -60,7 +64,7 @@ it("edita, deshace y elimina una zona guardada sin reutilizar coordenadas viejas
   expect(screen.getByRole("button",{name:"Guardar zona"})).toBeDisabled();
 });
 
-const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall",zones:null};
+const alert:AlertMsg={type:"alert",id:"synthetic-event",timestamp:100,updated_at:100,level:"critical",reasons:["immobile"],state:"RESOLVED",event:"expire",vision:null,vision_error:null,attention:"expired",recovery_at:null,kind:"fall",sources:["cam-1"],zones:null};
 
 it("prioriza la caída pendiente frente a la interrupción técnica sin cambiar el historial",()=>{
   const technical:AlertMsg={...alert,id:"camera",timestamp:200,state:"OPEN",kind:"technical",level:"suspect",reasons:["camera_disconnected"]};

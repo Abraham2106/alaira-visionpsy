@@ -14,11 +14,13 @@ class CollectSink:
     def __init__(self):
         self.messages: list[dict] = []
         self.frames: list[bytes] = []
+        self.frame_cameras: list[str] = []
 
     async def emit(self, message: dict):
         self.messages.append(message)
 
-    async def emit_frame(self, jpeg: bytes):
+    async def emit_frame(self, camera_id: str, jpeg: bytes):
+        self.frame_cameras.append(camera_id)
         self.frames.append(jpeg)
 
 

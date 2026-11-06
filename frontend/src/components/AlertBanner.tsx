@@ -1,12 +1,14 @@
 // Prioriza posibles caídas; entre alertas equivalentes muestra la más reciente.
 import { TriangleAlert } from "lucide-react";
+import { sourceLabel } from "../monitorStatus";
 import { REASONS, type AlertMsg } from "../types";
 
-export default function AlertBanner({ alerts }: { alerts: AlertMsg[] }) {
+export default function AlertBanner({ alerts, names }: { alerts: AlertMsg[]; names?: Record<string, string> }) {
   const open = alerts.filter(alert => alert.state === "OPEN").sort((a,b) =>
     Number(b.kind === "fall") - Number(a.kind === "fall") ||
     Number(b.level === "critical") - Number(a.level === "critical") || b.timestamp - a.timestamp)[0];
   if (!open) return null;
+  const where = sourceLabel(open, names);
   const time = new Date(open.timestamp * 1000).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
   });
@@ -14,7 +16,7 @@ export default function AlertBanner({ alerts }: { alerts: AlertMsg[] }) {
     <div className="alert-banner-copy">
       <span className="alert-banner-kicker"><TriangleAlert size={16}/> Alerta sin reconocer</span>
       <strong>{open.kind==="technical"?"Monitoreo interrumpido":"Posible caída detectada"}</strong>
-      <p>{open.reasons.map((reason) => REASONS[reason] ?? reason).join(" · ")} · {time}</p>
+      <p>{open.reasons.map((reason) => REASONS[reason] ?? reason).join(" · ")} · {time}{where && ` · ${where}`}</p>
     </div>
     <button type="button" className="button button-alert" onClick={() =>
       document.getElementById("alerts-heading")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
