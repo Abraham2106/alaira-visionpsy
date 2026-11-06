@@ -14,7 +14,7 @@ export default function MonitorDetails({ title, status, streaming, health, activ
       <summary><span className="terminal-prompt">visionpsy.local</span><span>camera --watch</span></summary>
       <div className="terminal-content">
         <div className="terminal-session"><span className="terminal-link">[{streaming ? "live" : "offline"}]</span> cámara {status?.camera_id ?? "—"}</div>
-        <div className="terminal-state"><span>status:</span><strong>{evaluable ? String(data?.phase ?? status?.level ?? "—") : quality}</strong></div>
+        <div className="terminal-state" data-phase={evaluable ? String(data?.phase ?? "UNKNOWN") : "UNKNOWN"}><span>status:</span><strong>{evaluable ? String(data?.phase ?? status?.level ?? "—") : quality}</strong></div>
         <p className="terminal-message" role="status">[{title}]</p>
         {status?.model_error && <p className="terminal-error">{status.model_error}</p>}
         <dl className="terminal-metrics">

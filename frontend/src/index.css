@@ -134,6 +134,11 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .terminal-session { padding:0 0 5px; }
 .terminal-state { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; color:var(--hud-accent); border-block:1px solid #ffffffb0; padding:4px 0; }
 .terminal-state strong { color:var(--hud-accent); font-weight:600; }
+.terminal-state[data-phase] strong { padding:0 4px; background:#ffffffe6; text-shadow:none; border-radius:2px; color:#111; }
+.terminal-state[data-phase="UPRIGHT"] strong { color:#166534; }
+.terminal-state[data-phase="FALLING"] strong { color:#92400e; }
+.terminal-state[data-phase="DOWN"] strong { color:#b42318; }
+.terminal-state[data-phase="FALL_CONFIRMED"] strong { color:#fff; background:#b42318; box-shadow:0 0 5px #b4231860; }
 .terminal-message { margin:4px 0 12px; color:#f2f2f2; font-size:12px; line-height:1.4; }
 .terminal-metrics { margin:0; padding:0; }
 .terminal-metrics div { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 7px; min-height:18px; }
