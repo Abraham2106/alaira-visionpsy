@@ -118,6 +118,7 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .camera-preview video,.camera-preview canvas { width:100%; height:100%; object-fit:contain; }
 .camera-preview > .video-surface { position:absolute; inset:0; width:100%; height:100%; aspect-ratio:auto; border-radius:0; }
 .camera-preview [hidden] { display:none; }
+.camera-preview > .video-overlay { background:transparent; pointer-events:none; }
 .camera-controls { display:grid; gap:10px; padding:16px 18px 18px; }
 .camera-controls .field-label { margin:0; }
 .camera-controls .small-note,.camera-controls .consent-note { margin:0; }

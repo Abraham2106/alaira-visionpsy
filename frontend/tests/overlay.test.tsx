@@ -11,6 +11,17 @@ beforeEach(()=>{
 });
 afterEach(()=>vi.unstubAllGlobals());
 
+it("superpone la pose sin pintar un JPEG que tape el video directo",async()=>{
+  const bitmap={width:800,height:600,close:vi.fn()};
+  vi.mocked(createImageBitmap).mockResolvedValue(bitmap as unknown as ImageBitmap);
+  const landmarks:[number,number,number][]=Array.from({length:33},()=>[.5,.5,1]);
+  const view=render(<VideoCanvas frame={new Blob(["frame"])} pose={{type:"pose",camera_id:"cam-1",timestamp:1,landmarks}} overlay/>);
+  await waitFor(()=>expect(bitmap.close).toHaveBeenCalledOnce());
+  expect(context.drawImage).not.toHaveBeenCalled();
+  expect(context.arc).toHaveBeenCalledTimes(33);
+  expect(view.container.firstChild).toHaveClass("video-overlay");
+});
+
 it.each([[900,900],[1200,900],[1600,900]])("alinea las articulaciones con el frame original %i×%i",async(width,height)=>{
   const bitmap={width,height,close:vi.fn()};
   vi.mocked(createImageBitmap).mockResolvedValue(bitmap as unknown as ImageBitmap);

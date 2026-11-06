@@ -90,6 +90,10 @@ def test_no_pose_and_estimator_failure_clear_previous_pose(settings, sink, jpeg,
         assert next(message for message in sink.messages if message["type"] == "pose")["landmarks"] is None
         assert bool(pipeline.last_status.model_error) == failure
         assert pipeline.alerts.snapshot() == []
+        await pipeline.process(jpeg, .2)
+        assert pipeline.last_status.diagnostics["fps"] == 5
+        await pipeline.camera_disconnected(.3)
+        assert pipeline.last_status.diagnostics["fps"] == 0
         await pipeline.close()
     asyncio.run(run())
 

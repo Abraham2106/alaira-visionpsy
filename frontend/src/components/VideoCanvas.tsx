@@ -8,7 +8,7 @@ const CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6,
   [23, 24], [23, 25], [25, 27], [27, 29], [27, 31], [29, 31], [24, 26], [26, 28],
   [28, 30], [28, 32], [30, 32]];
 
-export default function VideoCanvas({ frame, pose }: { frame: Blob | null; pose: PoseMsg | null }) {
+export default function VideoCanvas({ frame, pose, overlay = false }: { frame: Blob | null; pose: PoseMsg | null; overlay?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!frame) return;
@@ -21,7 +21,7 @@ export default function VideoCanvas({ frame, pose }: { frame: Blob | null; pose:
       canvas.height = bitmap.height;
       const context = canvas.getContext("2d");
       if (!context) { bitmap.close(); return; }
-      context.drawImage(bitmap, 0, 0);
+      if (!overlay) context.drawImage(bitmap, 0, 0);
       bitmap.close();
       const landmarks = pose?.landmarks;
       if (!landmarks) return;
@@ -46,9 +46,9 @@ export default function VideoCanvas({ frame, pose }: { frame: Blob | null; pose:
       // Un JPEG incompleto no debe romper el monitor; el siguiente frame vuelve a intentarlo.
     });
     return () => { cancelled = true; };
-  }, [frame, pose]);
+  }, [frame, pose, overlay]);
 
-  return <div className="video-surface">
+  return <div className={`video-surface${overlay ? " video-overlay" : ""}`}>
     {frame ? <canvas ref={canvasRef} aria-label="Último frame y esqueleto estimado" />
       : <div className="video-empty"><span className="camera-symbol" aria-hidden="true">⌖</span>
         <h3>Sin señal</h3>

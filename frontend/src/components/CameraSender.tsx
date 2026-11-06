@@ -49,9 +49,9 @@ export default function CameraSender({ token, active: visible = true }: { token:
       <section className="panel feed-panel">
         <div className="panel-heading"><h2>Cámara</h2><span className="local-indicator">{running && streaming ? "En directo" : statusTitle}</span></div>
         <div className="camera-preview">
-          <video ref={videoRef} muted playsInline hidden={mode !== "camera" || frame !== null} />
+          <video ref={videoRef} muted playsInline hidden={mode !== "camera"} />
           <canvas ref={captureRef} hidden={mode === "camera" || frame !== null} />
-          {frame && <VideoCanvas frame={frame} pose={pose} />}
+          {frame && <VideoCanvas frame={frame} pose={pose} overlay={mode === "camera"} />}
           {!running && <div className="preview-label">Captura detenida</div>}
         </div>
         <div className="feed-footer"><span><span className="skeleton-key"/>{poseLabel(pose, health?.synthetic)}</span><span>{frames} frames enviados</span></div>

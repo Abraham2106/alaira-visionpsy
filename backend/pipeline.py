@@ -31,6 +31,7 @@ class Pipeline:
         self.camera_id = camera_id
         self.detector = TemporalFallDetector()
         self.pose_latency_ms = 0.0
+        self.frame_times = deque(maxlen=30)
         self.history = deque(maxlen=settings.pipeline.history_size)
         # Almacenes inyectables: la alerta de caídas se comparte por habitación; la técnica es por cámara.
         self.alerts = alerts or (room.alerts if room is not None else AlertStore(settings.alerts, sink, repository=repository))
@@ -71,7 +72,10 @@ class Pipeline:
     async def _status(self, result: Assessment, now: float, camera: str, error: str | None = None) -> None:
         self.last_status = StatusMsg(camera_id=self.camera_id, timestamp=now, level=result.level, reasons=list(result.reasons),
                                      camera=camera, model_error=error,
-                                     diagnostics={**self.detector.diagnostics(), "latency_ms": round(self.pose_latency_ms, 1)})
+                                     diagnostics={**self.detector.diagnostics(),
+                                                  "fps": round((len(self.frame_times)-1)/(self.frame_times[-1]-self.frame_times[0]), 1)
+                                                  if len(self.frame_times)>1 else 0,
+                                                  "latency_ms": round(self.pose_latency_ms, 1)})
         await self.sink.emit(self.last_status.model_dump(mode="json"))
 
     async def process(self, jpeg: bytes, now: float | None = None) -> None:
@@ -88,6 +92,9 @@ class Pipeline:
                 self.history.clear()
                 await self._observe(None, ts)
             self.last_frame = ts
+            if self.frame_times and not 0 < ts-self.frame_times[-1] <= self.settings.server.camera_timeout_seconds:
+                self.frame_times.clear()
+            self.frame_times.append(ts)
             await self.sink.emit_frame(self.camera_id, jpeg)
             try:
                 inference_started = time.perf_counter()
@@ -147,6 +154,7 @@ class Pipeline:
     async def _disconnect(self, now: float) -> None:
         was_streaming = self.last_frame is not None
         self.detector.reset()
+        self.frame_times.clear()
         self.history.clear()
         self.last_frame = None
         await self._observe(None, now)
