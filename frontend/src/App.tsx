@@ -133,7 +133,6 @@ export default function App() {
       <h1>{title}</h1></div>
       <div className="header-actions"><span className="today-pill">Hoy</span><span className="header-mode"><Radio size={14}/>Local</span></div>
     </header>
-    <p className="safety-note" role="note"><strong>Prototipo no médico.</strong> Puede fallar; no sustituye una llamada de emergencia.</p>
     {!token && access === "loading" ? <main className="login-layout"><p role="status">Conectando con esta PC…</p></main> : !token ? <main className="login-layout"><form className="panel login-panel" onSubmit={connect}>
       <h2>Conectar</h2><p className="small-note">En la PC abre el panel local para entrar automáticamente. Para vincular un celular, abre <a href="#/phone">Cámara del celular</a>.</p>
       {loginError && <p className="error-box" role="alert">{loginError}</p>}
