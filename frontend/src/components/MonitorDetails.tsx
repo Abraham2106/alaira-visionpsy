@@ -1,40 +1,32 @@
-import { REASONS, type Health, type StatusMsg } from "../types";
+import type { Health, StatusMsg } from "../types";
 
-const MODEL_LABEL: Record<string, string> = {
-  stub: "Sintética", mediapipe: "MediaPipe", llamacpp: "llama.cpp", qvac: "QVAC",
-};
-
-function DetectorDiagnostics({diagnostics}:{diagnostics:Record<string,number|string|null>}) {
-  return <details className="detector-diagnostics"><summary>Diagnóstico</summary><dl>
-    <div><dt>Estado</dt><dd>{String(diagnostics.phase ?? "—")}</dd></div>
-    <div><dt>Pose</dt><dd>{({complete:"Completa",partial:"Parcial",missing:"No evaluable"} as Record<string,string>)[String(diagnostics.quality)] ?? "—"}</dd></div>
-    <div><dt>Torso</dt><dd>{diagnostics.angle_deg ?? "—"}°</dd></div>
-    <div><dt>Descenso</dt><dd>{diagnostics.vertical_speed ?? "—"} torsos/s</dd></div>
-    <div><dt>Giro</dt><dd>{diagnostics.angular_speed ?? "—"}°/s</dd></div>
-    <div><dt>Evidencia</dt><dd>{diagnostics.observed_seconds ?? 0} s</dd></div>
-    <div><dt>Procesamiento</dt><dd>{diagnostics.fps ?? "—"} FPS · {diagnostics.latency_ms ?? "—"} ms</dd></div>
-  </dl></details>;
-}
+const MODEL_LABEL: Record<string, string> = { stub: "Sintética", mediapipe: "MediaPipe", llamacpp: "llama.cpp", qvac: "QVAC" };
 
 export default function MonitorDetails({ title, status, streaming, health, active }:
   { title: string; status: StatusMsg | null; streaming: boolean; health: Health | null; active: number }) {
-  const severity = streaming && !status?.reasons.includes("no_pose") ? status?.level : "idle";
-  const diagnostics = status?.diagnostics;
-  const vision = health ? `${MODEL_LABEL[health.vision] ?? health.vision}${health.vision === "stub" ? " (pendiente)" : ""}` : "—";
-  return <div className="detail-grid">
-    <section className={`panel assessment assessment-${severity}`} aria-live="polite">
-      <div className="panel-heading"><h2>Estado</h2></div>
-      <div className="detail-body"><h3>{title}</h3>
-        {status?.model_error && <p className="error-text">{status.model_error}</p>}
-        {streaming && status?.reasons.map((reason) => <span className="reason-tag" key={reason}>{REASONS[reason] ?? reason}</span>)}
-        {diagnostics && <DetectorDiagnostics diagnostics={diagnostics}/>}
+  const data = status?.diagnostics;
+  const evaluable = streaming && data?.quality !== "missing" && !status?.reasons.includes("no_pose") && !status?.model_error;
+  const tone = !streaming || !evaluable ? "idle" : status?.level ?? "idle";
+  const quality = !streaming ? "SIN SEÑAL" : !evaluable ? "NO EVALUABLE" : data?.quality === "partial" ? "PARCIAL" : data?.quality === "complete" ? "COMPLETA" : "—";
+  const value = (key: string, unit = "") => streaming && data?.[key] != null ? `${data[key]}${unit}` : "—";
+  return <section className={`terminal-hud terminal-${tone}`} aria-label="Telemetría de cámara">
+    <details open>
+      <summary><span className="terminal-prompt" aria-hidden="true">›_</span><span>visionpsy / live</span><span className="terminal-link"><i/>{streaming ? "LIVE" : "OFFLINE"}</span></summary>
+      <div className="terminal-content">
+        <div className="terminal-state"><span>STATUS</span><strong>{evaluable ? String(data?.phase ?? status?.level ?? "—") : quality}</strong></div>
+        <p className="terminal-message" role="status">{title}</p>
+        {status?.model_error && <p className="terminal-error">{status.model_error}</p>}
+        <dl className="terminal-metrics">
+          <div><dt>pose</dt><dd>{quality}</dd></div>
+          <div><dt>torso</dt><dd>{evaluable ? value("angle_deg", "°") : "—"}</dd></div>
+          <div><dt>descenso</dt><dd>{evaluable ? value("vertical_speed", " torsos/s") : "—"}</dd></div>
+          <div><dt>giro</dt><dd>{evaluable ? value("angular_speed", "°/s") : "—"}</dd></div>
+          <div><dt>evidencia</dt><dd>{value("observed_seconds", " s")}</dd></div>
+          <div className="terminal-performance"><dt>proceso</dt><dd>{value("fps", " FPS")} <span> / </span>{value("latency_ms", " ms")}</dd></div>
+        </dl>
+        <div className="terminal-system"><span>pose <b>{health ? MODEL_LABEL[health.pose] ?? health.pose : "—"}</b></span><span>visión <b>{health ? MODEL_LABEL[health.vision] ?? health.vision : "—"}</b></span></div>
+        <div className="terminal-bottom"><span>ALERTAS <b>{active}</b></span><span>REC <b>OFF</b></span></div>
       </div>
-    </section>
-    <section className="panel"><div className="panel-heading"><h2>Sistema</h2></div>
-      <dl className="system-facts"><div><dt>Pose</dt><dd>{health ? MODEL_LABEL[health.pose] ?? health.pose : "—"}</dd></div>
-        <div><dt>Visión</dt><dd>{vision}</dd></div>
-        <div><dt>Alertas activas</dt><dd>{active}</dd></div>
-        <div><dt>Grabación</dt><dd>Desactivada</dd></div></dl>
-    </section>
-  </div>;
+    </details>
+  </section>;
 }

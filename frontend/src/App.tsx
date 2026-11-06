@@ -57,10 +57,11 @@ function Dashboard({ token }: { token: string }) {
             <VideoCanvas frame={view?.frame ?? null} pose={view?.pose ?? null}/>
             <figcaption><strong>{names[id] ?? id}</strong><span>{monitorTitle(connected, view?.status ?? null)}</span></figcaption>
           </figure>;
-        })}</div> : <VideoCanvas frame={views[primary]?.frame ?? null} pose={pose}/>}
+        })}</div> : <div className="monitor-stage"><VideoCanvas frame={views[primary]?.frame ?? null} pose={pose}/>
+          <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/></div>}
         <div className="feed-footer"><span><span className="skeleton-key"/>{health?.pose === "mediapipe" ? "Pose MediaPipe" : health ? "Pose sintética" : "Pose"}</span><span>{connected ? "Conectado" : "Desconectado"}</span></div>
       </div>
-      <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
+      {many && <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>}
     </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={updateAlert} names={names}/></aside></div>
   </main>;
 }

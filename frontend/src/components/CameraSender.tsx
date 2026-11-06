@@ -53,6 +53,7 @@ export default function CameraSender({ token, active: visible = true }: { token:
           <canvas ref={captureRef} hidden={mode === "camera" || frame !== null} />
           {frame && <VideoCanvas frame={frame} pose={pose} overlay={mode === "camera"} />}
           {!running && <div className="preview-label">Captura detenida</div>}
+          <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
         </div>
         <div className="feed-footer"><span><span className="skeleton-key"/>{poseLabel(pose, health?.synthetic)}</span><span>{frames} frames enviados</span></div>
         <div className="camera-controls">
@@ -69,7 +70,6 @@ export default function CameraSender({ token, active: visible = true }: { token:
           <p className="consent-note">Inicia la cámara con el consentimiento de la persona supervisada.</p>
         </div>
       </section>
-      <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
     </section><aside className="monitor-aside"><AlertPanel alerts={alerts} token={token} onUpdate={monitor.updateAlert} names={names}/></aside></div>
   </main>;
 }
