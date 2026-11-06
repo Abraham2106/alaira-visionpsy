@@ -9,6 +9,9 @@ import ssl
 import subprocess
 import sys
 import time
+import threading
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -28,8 +31,36 @@ def port_free(host,port):
             raise RuntimeError(f"No se puede usar {host}:{port}: puerto ocupado o IP no disponible") from error
 
 
+def public_certificate_server(host, port, cert_dir, app_url):
+    """Expose exactly the public CA and setup help, never a filesystem directory."""
+    from html import escape
+    public_ca=(Path(cert_dir)/'ca.pem').read_bytes()
+    page=(f'<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+          f'<title>VisionPsy · Celular</title><body style="font:16px system-ui;max-width:640px;margin:40px auto;padding:20px">'
+          f'<h1>Conectar el celular</h1><ol><li><a href="/ca.crt">Descargar certificado público</a>.</li>'
+          f'<li>Confía en ese certificado local en la PC y en el celular. Solo se necesita al preparar esta conexión o renovar su certificado.</li>'
+          f'<li><a href="{escape(app_url)}">Abrir VisionPsy</a> y generar el QR en Conexiones.</li></ol>'
+          f'<p>Ambos dispositivos deben estar en la misma red. Las claves privadas permanecen en esta PC.</p></body></html>').encode()
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path not in ('/','/ca.crt'):
+                self.send_error(404);return
+            body=public_ca if self.path=='/ca.crt' else page
+            self.send_response(200)
+            self.send_header('Content-Type','application/x-x509-ca-cert' if self.path=='/ca.crt' else 'text/html; charset=utf-8')
+            if self.path=='/ca.crt':self.send_header('Content-Disposition','attachment; filename="visionpsy-local-ca.crt"')
+            self.send_header('Content-Length',str(len(body)))
+            self.end_headers();self.wfile.write(body)
+        def log_message(self,*_):pass
+    server=ThreadingHTTPServer((host,port),Handler)
+    threading.Thread(target=server.serve_forever,daemon=True).start()
+    return server
+
+
 def prepare(args):
     host=host_name(args.host)
+    # Verify this is an interface of this PC before sending any credential in a reuse probe.
+    port_free(host,0)
     if args.front_port==args.back_port:
         raise RuntimeError("Frontend y backend necesitan puertos distintos")
     env=os.environ.copy()
@@ -73,9 +104,19 @@ def prepare(args):
     node=shutil.which("node")
     if not node:
         raise RuntimeError("No se encuentra Node.js")
-    port_free(host,args.front_port)
-    port_free("127.0.0.1",args.back_port)
-    return env,settings,node,f"{scheme}://{host}:{args.front_port}",tls_context
+    url=f"{scheme}://{host}:{args.front_port}"
+    try:
+        port_free(host,args.front_port)
+        port_free("127.0.0.1",args.back_port)
+    except RuntimeError:
+        try:
+            request=Request(url+'/api/health',headers={'Authorization':'Bearer '+settings.token})
+            with urlopen(request,timeout=2,context=tls_context) as response:health=json.load(response)
+            if health.get('name')=='VisionPsy-Local' and health.get('pose')==env['POSE_BACKEND']:
+                return env,settings,node,url,tls_context,True
+        except (OSError,ValueError):pass
+        raise
+    return env,settings,node,url,tls_context,False
 
 
 def main():
@@ -87,18 +128,30 @@ def main():
     parser.add_argument("--cert-dir",type=Path)
     parser.add_argument("--database",type=Path)
     parser.add_argument("--check",action="store_true")
+    parser.add_argument("--open",action="store_true",help="Abrir el navegador al estar listo")
+    parser.add_argument("--serve-ca",action="store_true",help="Publicar solo la CA para preparar el celular")
+    parser.add_argument("--ca-port",type=int,choices=range(1024,65536),default=8765,metavar="PORT")
     parser.add_argument("--runtime-seconds",type=float,default=0,help="Detener después de N segundos; útil para ensayos automatizados")
     args=parser.parse_args()
-    env,settings,node,url,context=prepare(args)
+    env,settings,node,url,context,existing=prepare(args)
     print(json.dumps({"url":url,"camera_url":url+"/#/phone","pose":env["POSE_BACKEND"],"notifications":settings.notifications.enabled,"checks":"ok"}),flush=True)
     if args.check:
         return
+    if existing:
+        print('VisionPsy ya está abierto. No se iniciarán procesos duplicados.',flush=True)
+        if args.open:webbrowser.open(url)
+        return
     children=[]
     logs=[]
+    ca_server=None
     def interrupted(*_):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,interrupted)
     try:
+        if args.serve_ca:
+            if not args.cert_dir:raise RuntimeError('--serve-ca requiere --cert-dir')
+            if args.ca_port in (args.front_port,args.back_port):raise RuntimeError('El puerto del certificado debe ser distinto')
+            ca_server=public_certificate_server(args.host,args.ca_port,args.cert_dir,url)
         for name,command,cwd in [
             ("backend",[sys.executable,"-m","backend.main"],ROOT),
             ("frontend",[node,str(ROOT/"frontend/node_modules/vite/bin/vite.js"),"--host",args.host,"--port",str(args.front_port)],ROOT/"frontend")]:
@@ -124,6 +177,9 @@ def main():
         if not ready:
             raise RuntimeError("El proxy no confirmó la salud del backend dentro del plazo")
         print("Servicios listos. Ctrl+C para detener.",flush=True)
+        print(f'VisionPsy: {url}',flush=True)
+        if args.open:
+            webbrowser.open(f'http://{args.host}:{args.ca_port}/' if args.serve_ca else url)
         started=time.monotonic()
         while not args.runtime_seconds or time.monotonic()-started<args.runtime_seconds:
             if any(child.poll() is not None for child in children):
@@ -132,6 +188,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if ca_server:
+            ca_server.shutdown();ca_server.server_close()
         for child in reversed(children):
             if child.poll() is None:
                 child.terminate()

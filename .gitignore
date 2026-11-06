@@ -3,6 +3,7 @@
 *.telegram.json
 .telegram-*
 .venv/
+.tools/
 .venv311/
 .venv312/
 __pycache__/

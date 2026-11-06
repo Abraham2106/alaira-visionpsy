@@ -6,6 +6,7 @@ import re
 import shutil
 import ssl
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,12 +33,13 @@ def prepare(host, output, openssl=None):
     host = host_name(host)
     output = Path(output).resolve()
     tool = openssl or shutil.which("openssl")
-    if not tool:
-        raise RuntimeError("OpenSSL no está disponible; instala una distribución oficial o usa mkcert según la guía HTTPS")
     output.mkdir(parents=True, exist_ok=True)
     names = {name:output / name for name in ["ca.pem","ca-key.pem","server.pem","server-key.pem","server.csr","server.ext"]}
     if any(names[n].exists() for n in ["ca.pem","ca-key.pem","server.pem","server-key.pem"]):
         raise RuntimeError("El directorio ya contiene certificados; usa otro directorio para evitar reemplazar claves")
+
+    if not tool:
+        return prepare_with_python(host, output, names)
 
     def run(*args):
         result = subprocess.run([tool,*map(str,args)],capture_output=True,text=True,timeout=30)
@@ -65,6 +67,47 @@ def prepare(host, output, openssl=None):
     result={"host":host,"certificate":str(names["server.pem"]),"key":str(names["server-key.pem"]),
             "public_ca":str(names["ca.pem"]),"trust_installed":False,"valid_days":30}
     (output/"https.json").write_text(json.dumps(result,indent=2)+"\n",encoding="utf-8")
+    return result
+
+
+def prepare_with_python(host, output, names):
+    """Same certificate contract on a fresh Windows PC without an OpenSSL CLI."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+    now=datetime.now(timezone.utc)
+    ca_key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
+    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
+    issuer=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'Alaira VisionPsy Local CA')])
+    ca=(x509.CertificateBuilder().subject_name(issuer).issuer_name(issuer).public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(minutes=5))
+        .not_valid_after(now+timedelta(days=365)).add_extension(x509.BasicConstraints(ca=True,path_length=0),critical=True)
+        .add_extension(x509.KeyUsage(False,False,False,False,False,True,True,False,False),critical=True)
+        .sign(ca_key,hashes.SHA256()))
+    alt=[x509.DNSName('localhost'),x509.IPAddress(ipaddress.ip_address('127.0.0.1'))]
+    try: item=x509.IPAddress(ipaddress.ip_address(host))
+    except ValueError: item=x509.DNSName(host)
+    if item not in alt:alt.append(item)
+    cert=(x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,host)]))
+        .issuer_name(issuer).public_key(key.public_key()).serial_number(x509.random_serial_number())
+        .not_valid_before(now-timedelta(minutes=5)).not_valid_after(now+timedelta(days=30))
+        .add_extension(x509.BasicConstraints(ca=False,path_length=None),critical=True)
+        .add_extension(x509.SubjectAlternativeName(alt),critical=False)
+        .add_extension(x509.KeyUsage(True,False,True,False,False,False,False,False,False),critical=True)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),critical=False)
+        .sign(ca_key,hashes.SHA256()))
+    for name,material in [('ca-key.pem',ca_key),('server-key.pem',key)]:
+        with names[name].open('xb') as file:
+            names[name].chmod(0o600)
+            file.write(material.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()))
+    names['ca.pem'].write_bytes(ca.public_bytes(serialization.Encoding.PEM))
+    names['server.pem'].write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(names['server.pem'],names['server-key.pem'])
+    result={'host':host,'certificate':str(names['server.pem']),'key':str(names['server-key.pem']),
+            'public_ca':str(names['ca.pem']),'trust_installed':False,'valid_days':30}
+    (output/'https.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     return result
 
 

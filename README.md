@@ -1,76 +1,75 @@
 # Alaira VisionPsy
 
-Prototipo de monitoreo local de posibles caídas. Usa la webcam o la cámara de un celular conectado a la misma red, estima la postura con MediaPipe y muestra video con esqueleto corporal. Permite marcar zonas, guardar eventos y avisar por Telegram a familiares vinculados.
+Monitoreo local de posibles caídas con la webcam o cámaras de celulares. Usa MediaPipe y reglas temporales para estimar posturas, permite delimitar zonas y registra eventos. Los avisos a familiares por Telegram son opcionales. El video permanece en la PC; no se graba por defecto. VisionPsy-Nano está desactivado.
 
-El video y la inferencia permanecen en la PC. Telegram recibe únicamente texto del evento y necesita internet. Pensado para una habitación y una persona, con una o varias cámaras fijas (ver *Varias cámaras*).
+## Empezar en Windows
 
-> Prototipo experimental, no dispositivo médico ni servicio de emergencias. Puede omitir situaciones o producir falsas alertas. Requiere consentimiento de la persona supervisada. Una zona de cama o silla no demuestra ausencia de riesgo.
+Necesitas Windows 10/11 **x64**, una webcam y conexión a internet para la primera preparación. No necesitas instalar Python o Node manualmente ni ejecutar como administrador.
 
-## Requisitos
-
-- Python 3.11 o 3.12 y Node.js 22.12 o posterior.
-- Webcam; para celular, ambos equipos en la misma red y HTTPS confiable.
-- Internet para instalar dependencias y descargar el modelo una vez.
-- OpenSSL para generar certificados locales. Telegram es opcional y requiere un bot propio.
-
-## Instalación
-
-Desde la raíz, en PowerShell:
+Haz doble clic en **`run.cmd`**, o abre una terminal en la carpeta y ejecuta:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-pose.lock.txt
-.\.venv\Scripts\python.exe scripts/download_pose_model.py
-npm --prefix frontend ci
+.\run.cmd
 ```
 
-Crea `backend/.env` a partir de `backend/.env.example` y asigna un `APP_TOKEN` aleatorio. No sobrescribas un archivo existente. Puedes generar el valor con:
+El lanzador descarga herramientas portables si faltan, prepara Python 3.12 y las dependencias fijadas, descarga y verifica MediaPipe, crea la credencial interna y abre **http://127.0.0.1:5175**. La primera ejecución puede tardar unos minutos; las siguientes reutilizan lo instalado. Acepta el permiso de cámara al pulsar **Iniciar cámara**.
+
+Mantén abierta la ventana del lanzador. **Ctrl+C** detiene los servicios. Ejecutarlo otra vez mientras esa sesión está activa abre la misma app sin iniciar procesos duplicados.
+
+Las herramientas se guardan en `.tools/`, el entorno Python en `.venv/` y la interfaz en `frontend/node_modules/`. Las descargas portables de [uv](https://github.com/astral-sh/uv) y [Node.js](https://nodejs.org/) se verifican por SHA-256. No se instalan herramientas globales ni se modifica el almacén de certificados.
+
+## Usar la cámara del celular
+
+Con la PC y el teléfono en la misma Wi-Fi:
 
 ```powershell
-.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
+.\run.cmd -Phone
 ```
 
-## Ejecutar
+El lanzador detecta la IP local, prepara HTTPS y abre las instrucciones de conexión. La **primera vez debes instalar y confiar en el certificado público local en la PC y el celular**: el navegador exige HTTPS confiable para permitir la cámara. Ese paso del sistema operativo no se puede completar automáticamente desde la página.
+
+Después abre **Conexiones → Generar QR de cámara**, escanea el QR con el teléfono y pulsa **Iniciar cámara**. El QR incluye un código temporal de un solo uso; no hay que escribir el token administrador. Mantén la página del teléfono visible.
+
+Si tienes varias interfaces de red, puedes elegir la IP:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/run_local.py --mode real
+.\run.cmd -Phone -HostAddress 192.168.1.20
 ```
 
-Abre **http://127.0.0.1:5175** en la PC: entrarás automáticamente, sin escribir un token. El supervisor entrega la credencial interna solo a conexiones de esta computadora y del mismo origen; permanece en memoria y no se incluye en el bundle. Otros dispositivos deben vincular su cámara por código. El supervisor inicia frontend y backend, comprueba su salud y los detiene con `Ctrl+C`. El backend escucha únicamente en loopback. `--check` valida la configuración sin iniciar servicios; `--mode demo` usa poses sintéticas, sin analizar la imagen.
+Solo se publica el certificado **público** en el puerto 8765; las claves privadas permanecen en `certs/`. Si cambia la IP o vence el certificado, el lanzador prepara otro y debes confiar en el nuevo. No expongas los puertos a internet; algunas redes Wi-Fi aíslan los dispositivos y bloquean la conexión.
 
-La configuración está en `backend/config.yaml`; eventos, zonas y avisos se guardan en `data/visionpsy.sqlite3`. La retención predeterminada de eventos resueltos es de 7 días. No se graba video.
+## Configurar Telegram
 
-El detector temporal distingue postura vertical, posible caída, postura horizontal y persona posiblemente caída. Admite un lado del torso visible; no inventa articulaciones ausentes. Combina descenso relativo al torso, giro y persistencia, con recuperación a un ángulo menor. Los huecos breves conservan la sospecha sin sumar tiempo de confirmación; una pose ausente aparece como **No evaluable**. Los umbrales son experimentales: no calibra el suelo ni garantiza detectar caídas. El diagnóstico plegable muestra señales y tiempos locales.
+1. En **Conexiones → Familiares**, abre BotFather, crea tu bot y pega su token en el campo protegido.
+2. Pulsa **Conectar bot** y luego **Vincular familiar**. El familiar abre el enlace o QR y pulsa **Iniciar** en Telegram.
+3. Usa **Enviar prueba** para verificar la recepción. Puedes agregar un contacto principal y otro de respaldo.
 
-### Cámara del celular
+La configuración se guarda solo en esta PC y se activa sin reiniciar. Telegram recibe texto, nunca las imágenes. El bot necesita internet; el monitoreo necesita que la PC permanezca encendida. Cambiar a otro bot requiere volver a vincular a los familiares.
 
-Sustituye la IP por la dirección privada real de la PC:
+## Uso y datos
+
+- **Monitor:** cámaras, estado y eventos. **Cámara de PC:** iniciar o detener la webcam.
+- **Zonas:** delimitar camas, sillas u otras áreas. Una zona no demuestra ausencia de riesgo.
+- **Conexiones:** agregar cámaras y configurar familiares. Cada cámara conserva su vínculo y sus propias zonas.
+- **Historial:** consultar y atender los eventos registrados. Las alertas de caída se consolidan por habitación; las interrupciones técnicas son por cámara.
+
+Eventos, zonas y contactos se guardan en `data/visionpsy.sqlite3`; la configuración del bot está junto a esa base de datos. La credencial interna está en `backend/.env`. Esos archivos, los certificados, modelos y logs están excluidos de Git. Los eventos resueltos se conservan 7 días por defecto. Ajustes: `backend/config.yaml`.
+
+## Comprobación y desarrollo
+
+Preparar y comprobar todo sin dejar servicios corriendo:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/prepare_https.py --host 192.168.1.20 --output certs/demo
-.\.venv\Scripts\python.exe scripts/run_local.py --mode real --host 192.168.1.20 --cert-dir certs/demo
+.\run.cmd -Check
 ```
 
-En el teléfono de pruebas, instala conscientemente **solo `certs/demo/ca.pem`** como CA de desarrollo y abre `https://192.168.1.20:5175`. Las claves privadas permanecen en la PC. Si cambia la IP, prepara un certificado nuevo en otro directorio; no ignores errores de confianza.
+Si los puertos predeterminados están ocupados por otra aplicación:
 
-En **Conexiones**, ajusta la dirección HTTPS y pulsa **Generar QR de cámara**. Escanéalo en el teléfono: el código temporal viene incluido y se canjea automáticamente. Cada QR nuevo invalida el anterior para esa cámara y vence a los cinco minutos; el token administrador no se incluye. Después acepta el consentimiento y pulsa **Iniciar cámara**. Mantén la página visible. Detener libera la cámara; desvincular revoca su credencial. Las redes que aíslan clientes pueden impedir la conexión. No expongas estos puertos a internet.
+```powershell
+.\run.cmd -FrontPort 5176 -BackPort 8003
+```
 
-### Varias cámaras
-
-Una habitación puede tener varias cámaras (máximo `cameras.max` en `backend/config.yaml`, 4 por defecto). Se agregan y quitan en **Conexiones → Cámaras de la habitación**; `cam-1` es la principal y no se puede quitar. Cada cámara tiene su propio código de vinculación, su credencial, sus zonas (editor de **Zonas**) y su estimador de pose. El monitor muestra un mosaico con una baldosa por cámara cuando hay más de una.
-
-- **Una alerta de caída por habitación.** Se abre cuando cualquier cámara detecta una posible caída y registra qué cámaras la vieron. Se resuelve solo cuando todas las cámaras con pose utilizable vuelven a estar bien; una cámara sin pose, atrasada o desconectada no impide resolver ni genera una caída. Las interrupciones técnicas (cámara desconectada) siguen siendo una alerta por cámara.
-- **Compatibilidad.** Sin configuración adicional todo funciona como una sola cámara `cam-1`: las rutas históricas (`/zones`, `/pairing/camera`, `/camera/pair`) y los eventos y zonas ya guardados siguen válidos. Las migraciones de SQLite son idempotentes.
-- **Límites conocidos.** No se anota el caso en que dos cámaras discrepan (una ve caída y otra no): prevalece la crítica. Aún no hay interfaz para renombrar una cámara. Hasta tener mediciones en esta PC no se promete más de 2 a 4 cámaras: `scripts/benchmark_cameras.py` mide latencia, CPU y memoria con 1 a 4 estimadores (ver más abajo).
-- **Privacidad.** Igual que con una cámara: no se graba video, los eventos no llevan imágenes y Telegram recibe solo texto.
-
-### Telegram
-
-En **Conexiones → Familiares**, pega el token de BotFather y pulsa **Conectar bot**. Se valida con Telegram y se guarda localmente junto a SQLite, en un archivo `*.telegram.json` excluido de Git; la API no devuelve el token. No hace falta reiniciar. Luego pulsa **Vincular familiar**, abre el enlace o escanea el QR y pulsa **Iniciar** en Telegram. **Enviar prueba** manda un mensaje de prueba al familiar elegido. Puedes desconectar el bot desde la misma pantalla; cambiar a otro bot requiere volver a vincular a los familiares. La configuración anterior por `TELEGRAM_BOT_TOKEN` y `notifications.enabled` sigue siendo compatible.
-
-El principal recibe el aviso inicial; si nadie atiende, tras `notifications.reminder_seconds` recibe un recordatorio y se avisa al respaldo. Los botones **Estoy atendiendo** y **Descartar** actualizan el mismo evento. El polling es saliente: no necesita un webhook ni publicar el backend. “Aceptado por Telegram” no acredita lectura ni ayuda recibida. Un timeout puede dejar incertidumbre de entrega y causar repetición al reintentar.
-
-## Desarrollo y pruebas
+Para trabajar en el código, después de la preparación:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
@@ -79,45 +78,8 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-Para comparar el detector anterior y el temporal con MediaPipe sobre los mismos videos etiquetados: `python scripts/evaluate_detector.py --fall ruta/caida.mp4 --normal ruta/actividad.mp4`. El informe queda en `reports/`, ignorado por Git; no se guardan frames ni se envían avisos. Es una evaluación exploratoria por video, no precisión clínica. Usa videos con permisos adecuados y suficientes segundos posteriores al evento.
+El supervisor también puede ejecutarse directamente con `python scripts/run_local.py --mode real`. Los logs de arranque están en `reports/local-backend.log` y `reports/local-frontend.log`.
 
-En una comparación exploratoria con cuatro clips de URFD (fall-01, fall-02, adl-01 y adl-02, cámara 0, muestreo a 15 FPS), ambos detectores omitieron las dos caídas y no alertaron en los dos clips cotidianos. La nueva lógica temporal todavía no demuestra una mejora de detección en video real: siguen pendientes la pérdida de pose y la observación posterior a la caída.
+## Alcance actual
 
-`backend/` contiene API, pose, reglas, persistencia y avisos; `frontend/` contiene la interfaz; `scripts/` contiene utilidades de ejecución y verificación; `tests/` contiene pruebas backend. El contrato WebSocket está en `docs/ws.schema.json` y se verifica contra Python y TypeScript.
-
-Las pruebas de varias cámaras (consolidación, API de cámaras, almacenamiento, WebSocket y mosaico) usan poses y credenciales sintéticas. Para medir cuántas cámaras soporta tu equipo con MediaPipe real:
-
-```powershell
-.\.venv\Scripts\python.exe scripts/benchmark_cameras.py --image foto_con_persona.jpg --seconds 30
-.\.venv\Scripts\python.exe scripts/benchmark_cameras.py --mode processes --max-cameras 3
-```
-
-Imprime una línea JSON por cada N (p50/p95 de latencia, % de inferencias sobre 200 ms, CPU y memoria; CPU y memoria requieren `psutil`). Sin `--image` usa un cuadro sin persona y puede subestimar la latencia real.
-
-Las pruebas de reglas y del bot usan datos/proveedores sintéticos: no prueban precisión clínica ni recepción en un celular real. MediaPipe real y WSS se comprobaron por separado en una sesión local de dos minutos. Queda pendiente la aceptación física del teléfono, red y cuenta Telegram.
-
-Estado de validación de varias cámaras: con Python 3.12 pasan las 150 pruebas del backend, las 34 de Vitest y `npm run build`. Benchmark con MediaPipe real (Ryzen 5 8645HS, 12 hilos, hilos, 5 FPS por cámara, 30 s por N, una foto fija con una persona visible, modelo lite): con 1, 2, 3 y 4 estimadores el p95 fue de 42, 38, 36 y 55 ms, 0 % de inferencias sobre 200 ms, 5 FPS sostenidos por cámara y CPU media de 16 %, 28 %, 41 % y 77 % (100 % = un núcleo). Límites de esa medición: una imagen estática, no una escena en movimiento ni una webcam real; no incluye decodificar el JPEG que llega por red, ni las reglas de riesgo, SQLite o el WebSocket que corren en el mismo proceso; el RSS muestreado es irregular y no es fiable; no se probó `--mode processes`. En esta PC 4 cámaras a 5 FPS tienen margen de latencia, pero la CPU llega a 77 % de un núcleo; otro equipo puede dar otro resultado. Prueba física con dos dispositivos (webcam de la PC y un celular por HTTPS en la misma Wi-Fi, una persona que aceptó participar): se confirmaron persona de pie sin alerta, una sola alerta de caída con ambas cámaras, resolución al levantarse, caída vista con una cámara tapada, alerta técnica solo de la cámara detenida y su resolución al reconectar. Sin medir tiempos ni CPU durante esa prueba, y solo con 2 cámaras: 3 o 4 cámaras físicas siguen sin probarse. Telegram, con un bot real y un celular: se confirmó la vinculación con `/start <código>` y que el aviso inicial y el recordatorio a los 60 s llegan. Siguen pendientes de comprobar físicamente que dos cámaras viendo la misma caída producen un único mensaje, que los botones *Estoy atendiendo* y *Descartar* actualizan el evento y la escalada al contacto de respaldo. Python 3.14 no sirve: no hay paquetes de MediaPipe 0.10.21 y algunas pruebas con `TestClient` se cuelgan; usa 3.11 o 3.12.
-
-### VisionPsy-Nano Flash (opcional)
-
-El VLM está desactivado por defecto (`models.vision.backend: disabled`): no se carga ni se consulta y no ocupa VRAM. El monitoreo, el riesgo y las alertas funcionan con MediaPipe y las reglas temporales. Se conserva el adaptador opcional para experimentación; las pruebas locales mostraron errores de interpretación de posturas.
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-visionpsy.txt -r requirements-visionpsy-download.txt
-.\.venv\Scripts\python.exe scripts/download_visionpsy.py
-.\scripts\build_visionpsy_server.ps1
-```
-
-El build Windows requiere Visual Studio 2022 Community con MSVC 14.44.35207, CMake/Ninja y CUDA Toolkit 13.1.2 en `models/visionpsy-nano-flash/cuda-13.1.2/` (prefijo local de micromamba, paquete `cuda-toolkit=13.1.2`, canal `nvidia/label/cuda-13.1.2`). Compila para GPU NVIDIA con capacidad 8.6; otras GPU requieren ajustar el script. Fuente y pesos tienen revisiones fijas y se guardan fuera de Git.
-
-En `backend/config.yaml`, configura `models.vision` y reinicia:
-
-```yaml
-  vision:
-    backend: visionpsy
-    gguf_path: ../models/visionpsy-nano-flash/visionpsy-nano-460m-flash-q4_k_m-imat.gguf
-    runtime_library_dirs: [../models/visionpsy-nano-flash/cuda-13.1.2/Library/bin]
-    timeout_seconds: 15
-```
-
-El proyector y ejecutable tienen rutas predeterminadas en ese mismo directorio; se pueden cambiar con `mmproj_path` y `executable`. El servidor se carga una vez, escucha en loopback con clave efímera y admite una consulta a la vez, sin guardar imágenes. Un error o timeout deja la alerta vigente. La prueba del agente con una ilustración sintética registró 0.53 s en RTX 2050; la prueba CPU anterior tardó 45–48 s. Son pruebas técnicas pequeñas, sin demostrar precisión para caídas ni utilidad clínica; el español observado fue deficiente.
+Es un MVP experimental para una habitación y una persona supervisada, no un dispositivo médico. Las reglas combinan postura, giro, descenso y persistencia; una pose ausente aparece como **No evaluable**. Los umbrales todavía requieren validación: en la comparación exploratoria de cuatro clips URFD, el detector omitió las dos caídas y no alertó en los dos clips cotidianos. Las pruebas automáticas verifican el funcionamiento del software, no una precisión clínica ni la detección de todas las caídas.

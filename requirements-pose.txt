@@ -3,3 +3,4 @@
 -r backend/requirements.txt
 mediapipe==0.10.21
 Pillow>=10,<13
+cryptography==50.0.2
