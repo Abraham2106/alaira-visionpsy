@@ -91,13 +91,13 @@ it("genera el código de una cámara concreta, agrega y quita cámaras",async()=
   vi.mocked(fetch).mockImplementation(async(input,init)=>{
     const url=String(input);
     const body=url.includes("/cameras")?(init?.method==="POST"?{id:"cam-3",name:"Cocina",state:"waiting",connected:false}:CAMERAS)
-      :url.includes("/contacts")?[]:url.includes("/notifications")?{enabled:false,error:null,deliveries:[]}:{code:"once-2",expires_at:200};
+      :url.includes("/contacts")?[]:url.includes("/notifications")?{enabled:false,error:null,deliveries:[]}:{code:"once-2",expires_at:Date.now()/1000+300};
     return new Response(JSON.stringify(body));
   });
   const calls=()=>vi.mocked(fetch).mock.calls.map(([url,init])=>`${init?.method??"GET"} ${String(url)}`);
   render(<FamilySettings token="test-token"/>);
   fireEvent.change(await screen.findByLabelText("Cámara a vincular"),{target:{value:"cam-2"}});
-  fireEvent.click(screen.getByRole("button",{name:"Generar código de cámara"}));
+  fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
   await screen.findByText("once-2");
   expect(calls().some(call=>call.startsWith("POST")&&call.includes("/pairing/camera?camera_id=cam-2"))).toBe(true);
   fireEvent.click(screen.getByRole("button",{name:"Desvincular cámara"}));

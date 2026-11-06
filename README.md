@@ -51,7 +51,7 @@ Sustituye la IP por la dirección privada real de la PC:
 
 En el teléfono de pruebas, instala conscientemente **solo `certs/demo/ca.pem`** como CA de desarrollo y abre `https://192.168.1.20:5175`. Las claves privadas permanecen en la PC. Si cambia la IP, prepara un certificado nuevo en otro directorio; no ignores errores de confianza.
 
-En **Conexiones**, ajusta la dirección del QR y genera un código de cámara. Ábrelo en el teléfono, canjea el código y acepta el permiso y consentimiento. Mantén la página visible. Detener libera la cámara; desvincular revoca su credencial. Las redes que aíslan clientes pueden impedir la conexión. No expongas estos puertos a internet.
+En **Conexiones**, ajusta la dirección HTTPS y pulsa **Generar QR de cámara**. Escanéalo en el teléfono: el código temporal viene incluido y se canjea automáticamente. Cada QR nuevo invalida el anterior para esa cámara y vence a los cinco minutos; el token administrador no se incluye. Después acepta el consentimiento y pulsa **Iniciar cámara**. Mantén la página visible. Detener libera la cámara; desvincular revoca su credencial. Las redes que aíslan clientes pueden impedir la conexión. No expongas estos puertos a internet.
 
 ### Varias cámaras
 

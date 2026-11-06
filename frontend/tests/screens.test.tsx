@@ -10,7 +10,7 @@ import type {AlertMsg} from "../src/types";
 vi.mock("../src/hooks/useMonitor",()=>({useMonitor:()=>({frame:null,connected:true})}));
 vi.mock("../src/hooks/useWebSocket",()=>({useWebSocket:()=>({connected:false,error:null,send:()=>false})}));
 vi.mock("../src/hooks/useCameraCapture",()=>({useCameraCapture:()=>({videoRef:{current:null},captureRef:{current:null},frames:0,resetFrames:()=>{}})}));
-beforeEach(()=>{vi.stubGlobal("fetch",vi.fn());});
+beforeEach(()=>{location.hash="";vi.stubGlobal("fetch",vi.fn());});
 
 it("vincula un respaldo con un código de alcance propio",async()=>{
   vi.mocked(fetch).mockImplementation(async(input)=>new Response(JSON.stringify(

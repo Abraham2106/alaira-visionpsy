@@ -21,7 +21,7 @@ function subscribeHash(change: () => void) {
   return () => window.removeEventListener("hashchange", change);
 }
 
-const readHash = () => location.hash;
+const readHash = () => location.hash.split("?")[0];
 
 function Dashboard({ token }: { token: string }) {
   const { views, alerts, health, connected, error, updateAlert } = useMonitor(token);

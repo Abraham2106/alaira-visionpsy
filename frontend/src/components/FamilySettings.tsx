@@ -36,14 +36,21 @@ export default function FamilySettings({token}:{token:string}) {
     let url:URL;
     try {url=new URL(address);if(url.protocol!=="https:" && !(url.protocol==="http:"&&["localhost","127.0.0.1"].includes(url.hostname)))throw new Error();}
     catch {setQr("");return;}
+    if(!cameraCode){setQr("");return;}
+    url.username="";url.password="";url.search="";url.hash=`/phone?code=${encodeURIComponent(cameraCode.code)}`;
     QRCode.toDataURL(url.toString(),{width:220,margin:2}).then(data=>{if(!cancelled)setQr(data);}).catch(()=>{if(!cancelled)setQr("");});
     return ()=>{cancelled=true;};
-  },[address]);
+  },[address,cameraCode]);
+  useEffect(()=>{
+    if(!cameraCode)return;
+    const timer=window.setTimeout(()=>setCameraCode(null),Math.max(0,cameraCode.expires_at*1000-Date.now()));
+    return ()=>window.clearTimeout(timer);
+  },[cameraCode]);
   // cam-1 conserva la ruta histórica; las demás cámaras llevan su id.
   const cameraQuery=pairCamera===DEFAULT_CAMERA?"":`?camera_id=${encodeURIComponent(pairCamera)}`;
   async function issue(purpose:"camera"|"telegram"|"telegram_backup") {
     const version=++requestVersion.current;
-    setPending(true);setError(null);
+    setPending(true);setError(null);if(purpose==="camera"){setCameraCode(null);setQr("");}
     try {const code=await api<Code>(`/pairing/${purpose}${purpose==="camera"?cameraQuery:""}`,token,"POST");if(version!==requestVersion.current)return;if(purpose==="camera")setCameraCode(code);else setFamilyCode(code);}
     catch {if(version===requestVersion.current)setError("No se pudo generar el código.");}finally{if(version===requestVersion.current)setPending(false);}
   }
@@ -80,10 +87,11 @@ export default function FamilySettings({token}:{token:string}) {
       {cameras.length>1&&<><label htmlFor="pair-camera">Cámara a vincular</label><select id="pair-camera" value={pairCamera} disabled={pending} onChange={e=>{setPairCamera(e.target.value);setCameraCode(null);}}>
         {cameras.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></>}
       <label htmlFor="camera-address">Dirección HTTPS de esta PC en la red</label><input id="camera-address" type="url" value={address} onChange={e=>setAddress(e.target.value)}/>
-      {qr&&<img className="pairing-qr" src={qr} alt="QR de la dirección de captura del celular"/>}
+      {qr&&<img className="pairing-qr" src={qr} alt="QR para vincular la cámara del celular"/>}
       <p className="small-note">Usa el nombre o IP del certificado local. 127.0.0.1 apunta al propio teléfono.</p>
-      <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue("camera")}>Generar código de cámara</button>
-      {cameraCode&&<p role="status">Código de un solo uso: <code className="pairing-code">{cameraCode.code}</code><br/>Vence a las {new Date(cameraCode.expires_at*1000).toLocaleTimeString()}.</p>}
+      <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue("camera")}>{cameraCode?"Generar nuevo QR":"Generar QR de cámara"}</button>
+      {cameraCode&&<><p role="status">Escanea el QR para vincular el celular. Vence a las {new Date(cameraCode.expires_at*1000).toLocaleTimeString()}.</p>
+        <details><summary>Ingresar código manualmente</summary><code className="pairing-code">{cameraCode.code}</code></details></>}
       <button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/camera/pair${cameraQuery}`)}>Desvincular cámara</button>
     </div></section>
     <section className="panel settings-panel"><div className="panel-heading"><h2>Familiares</h2><button type="button" className="button button-outline" onClick={()=>void refresh()}>Actualizar</button></div><div className="settings-body">
