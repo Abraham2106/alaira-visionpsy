@@ -38,6 +38,10 @@ export default function FamilySettings({token}:{token:string}) {
   },[token]);
   useEffect(()=>{void refresh();},[refresh]);
   useEffect(()=>{
+    const timer=window.setInterval(()=>{if(!document.hidden)void refreshCameras();},2000);
+    return ()=>window.clearInterval(timer);
+  },[refreshCameras]);
+  useEffect(()=>{
     let cancelled=false;
     let url:URL;
     try {url=new URL(address);if(url.protocol!=="https:" && !(url.protocol==="http:"&&["localhost","127.0.0.1"].includes(url.hostname)))throw new Error();}
@@ -87,25 +91,24 @@ export default function FamilySettings({token}:{token:string}) {
   return <main className="settings-grid">
     {error&&<p className="error-box" role="alert">{error}</p>}
     <section className="panel settings-panel"><div className="panel-heading"><h2>Cámaras de la habitación</h2></div><div className="settings-body">
-      <ul className="settings-list">{cameras.map(c=><li key={c.id}><span>{c.name} · {c.connected?"Conectada":"Sin conexión"}</span>
+      <ul className="settings-list camera-list">{cameras.map(c=><li key={c.id}><span className="camera-name">{c.name}</span>
+        <span className={`camera-status ${c.connected&&c.state==="streaming"?"camera-status-live":"camera-status-offline"}`}>{c.connected&&c.state==="streaming"?"En vivo":"Sin conexión"}</span>
         {c.id!==DEFAULT_CAMERA&&<button type="button" className="button button-outline" disabled={pending} onClick={()=>void removeCamera(c.id)}>Quitar cámara</button>}</li>)}</ul>
-      <label htmlFor="new-camera">Nombre de la nueva cámara</label><input id="new-camera" value={newCamera} maxLength={80} onChange={e=>setNewCamera(e.target.value)} placeholder="Pasillo"/>
+      <label htmlFor="new-camera"><strong>Nombre</strong></label><input id="new-camera" value={newCamera} maxLength={80} onChange={e=>setNewCamera(e.target.value)} placeholder="Ej. Pasillo"/>
       <button type="button" className="button button-outline" disabled={pending||!newCamera.trim()} onClick={()=>void addCamera()}>Agregar cámara</button>
-      <p className="small-note">Todas las cámaras comparten una sola alerta de caída por habitación.</p>
     </div></section>
     <section className="panel settings-panel"><div className="panel-heading"><h2>Cámara del celular</h2></div><div className="settings-body">
       {cameras.length>1&&<><label htmlFor="pair-camera">Cámara a vincular</label><select id="pair-camera" value={pairCamera} disabled={pending} onChange={e=>{setPairCamera(e.target.value);setQr("");}}>
         {cameras.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></>}
-      <label htmlFor="camera-address">Dirección HTTPS de esta PC en la red</label><input id="camera-address" type="url" value={address} onChange={e=>setAddress(e.target.value)}/>
+      <label className="sr-only" htmlFor="camera-address">Dirección de cámara</label><input id="camera-address" type="url" value={address} onChange={e=>setAddress(e.target.value)}/>
       {qr&&<img className="pairing-qr" src={qr} alt="QR para vincular la cámara del celular"/>}
-      <p className="small-note">Usa el nombre o IP del certificado local. 127.0.0.1 apunta al propio teléfono.</p>
       <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue("camera")}>{cameraCode?"Generar nuevo QR":"Generar QR de cámara"}</button>
-      {cameraCode&&<><p role="status">Escanea el QR para vincular el celular. Vence a las {new Date(cameraCode.expires_at*1000).toLocaleTimeString()}.</p>
+      {cameraCode&&<><p className="small-note" role="status">Vence a las {new Date(cameraCode.expires_at*1000).toLocaleTimeString()} · Un solo uso</p>
         <details><summary>Ingresar código manualmente</summary><code className="pairing-code">{cameraCode.code}</code></details></>}
-      <button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/camera/pair?camera_id=${encodeURIComponent(pairCamera)}`)}>Desvincular cámara</button>
+      <button type="button" className="button button-quiet" disabled={pending} onClick={()=>void remove(`/camera/pair?camera_id=${encodeURIComponent(pairCamera)}`)}>Desvincular cámara</button>
     </div></section>
-    <section className="panel settings-panel"><div className="panel-heading"><h2>Familiares</h2><button type="button" className="button button-outline" onClick={()=>void refresh()}>Actualizar</button></div><div className="settings-body">
-      <p>{notices?.enabled ? "Bot habilitado" : "Bot deshabilitado: configura Telegram en el backend para enviar avisos reales."}</p>
+    <details className="panel settings-panel family-settings"><summary className="panel-heading"><h2>Familiares</h2><span className="disclosure-chevron" aria-hidden="true">⌄</span></summary><div className="settings-body">
+      <div className="family-toolbar"><span className="small-note">{notices?.enabled ? "Telegram activo" : "Telegram sin configurar"}</span><button type="button" className="button button-quiet" onClick={()=>void refresh()}>Actualizar</button></div>
       <label htmlFor="bot-name">Usuario del bot</label><input id="bot-name" value={bot} onChange={e=>setBot(e.target.value.replace(/^@/,""))} placeholder="MiVisionPsyBot"/>
       <label htmlFor="family-role">Recibir avisos como</label><select id="family-role" name="family-role" value={familyRole} disabled={pending} onChange={e=>{setFamilyRole(e.target.value as "primary"|"backup");setFamilyCode(null);}}><option value="primary">Contacto principal</option><option value="backup">Contacto de respaldo</option></select>
       <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue(familyRole==="backup"?"telegram_backup":"telegram")}>Vincular familiar</button>
@@ -114,7 +117,7 @@ export default function FamilySettings({token}:{token:string}) {
         <p className="small-note">Código temporal. El familiar recibirá datos del evento por Telegram; no se envían imágenes.</p></div>}
       <ul className="settings-list">{contacts.filter(c=>c.active).map(c=><li key={c.chat_id}><span>{c.alias} · {c.role==="backup"?"Respaldo":"Principal"}</span><button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/contacts/${encodeURIComponent(c.chat_id)}`)}>Desvincular</button></li>)}</ul>
       {notices?.error&&<p className="error-box" role="alert">{notices.error}</p>}
-      <h3>Últimos avisos</h3><ul className="settings-list">{notices?.deliveries.map(d=><li key={d.id}><span>Evento {d.event_id.slice(0,8)} · {d.status==="sent"?"Aceptado por Telegram":d.status==="pending"?"Pendiente":d.status==="failed"?"Falló":"Cancelado"} · {d.attempts} intentos</span>{d.error&&<span>{d.error}</span>}</li>)}</ul>
-    </div></section>
+      {Boolean(notices?.deliveries.length)&&<><h3>Últimos avisos</h3><ul className="settings-list">{notices?.deliveries.map(d=><li key={d.id}><span>Evento {d.event_id.slice(0,8)} · {d.status==="sent"?"Aceptado por Telegram":d.status==="pending"?"Pendiente":d.status==="failed"?"Falló":"Cancelado"} · {d.attempts} intentos</span>{d.error&&<span>{d.error}</span>}</li>)}</ul></>}
+    </div></details>
   </main>;
 }

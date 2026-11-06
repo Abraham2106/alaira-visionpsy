@@ -103,7 +103,7 @@ it("genera el código de una cámara concreta, agrega y quita cámaras",async()=
   fireEvent.click(screen.getByRole("button",{name:"Desvincular cámara"}));
   await waitFor(()=>expect(calls().some(call=>call.startsWith("DELETE")&&call.includes("/camera/pair?camera_id=cam-2"))).toBe(true));
   expect(screen.queryByText("once-2")).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Nombre de la nueva cámara"),{target:{value:" Cocina "}});
+  fireEvent.change(screen.getByLabelText("Nombre"),{target:{value:" Cocina "}});
   fireEvent.click(screen.getByRole("button",{name:"Agregar cámara"}));
   await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url).endsWith("/cameras")&&init?.method==="POST"
     &&JSON.parse(init.body as string).name==="Cocina")).toBe(true));
@@ -160,7 +160,7 @@ it("conserva cada QR al cambiar de cámara y selecciona la recién agregada",asy
   fireEvent.change(selected,{target:{value:"cam-1"}});
   expect(await screen.findByText("isolated-1")).toBeInTheDocument();
   expect(codeNumber).toBe(2); // Seleccionar no genera códigos ni renueva credenciales.
-  fireEvent.change(screen.getByLabelText("Nombre de la nueva cámara"),{target:{value:"Cocina"}});
+  fireEvent.change(screen.getByLabelText("Nombre"),{target:{value:"Cocina"}});
   fireEvent.click(screen.getByRole("button",{name:"Agregar cámara"}));
   await waitFor(()=>expect(selected).toHaveValue("cam-3"));
   fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
@@ -171,4 +171,19 @@ it("conserva cada QR al cambiar de cámara y selecciona la recién agregada",asy
   expect(vi.mocked(fetch).mock.calls.some(([,init])=>init?.method==="DELETE")).toBe(false);
   fireEvent.click(screen.getByRole("button",{name:"Desvincular cámara"}));
   await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url,init])=>String(url)==="/api/camera/pair?camera_id=cam-1"&&init?.method==="DELETE")).toBe(true));
+});
+
+it("actualiza el estado de cámara sin cambiar el QR ni renovar credenciales",async()=>{
+  let connected=false;
+  vi.mocked(fetch).mockImplementation(async(input)=>new Response(JSON.stringify(
+    String(input).endsWith("/cameras")?[{...CAMERAS[0],connected,state:connected?"streaming":"waiting"}]:
+    String(input).endsWith("/notifications")?{enabled:false,error:null,deliveries:[]}:[])));
+  render(<FamilySettings token="test-token"/>);
+  expect(await screen.findByText("Sin conexión")).toHaveClass("camera-status-offline");
+  expect(screen.getByText("Nombre").tagName).toBe("STRONG");
+  expect(screen.queryByText(/Todas las cámaras comparten/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Usa el nombre o IP/)).not.toBeInTheDocument();
+  connected=true;
+  await waitFor(()=>expect(screen.getByText("En vivo")).toHaveClass("camera-status-live"),{timeout:3500});
+  expect(vi.mocked(fetch).mock.calls.every(([,init])=>init?.method==="GET")).toBe(true);
 });

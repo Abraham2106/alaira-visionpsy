@@ -18,6 +18,7 @@ it("vincula un respaldo con un código de alcance propio",async()=>{
     String(input).includes("/notifications") ? {enabled:false,error:null,deliveries:[]}:
     {code:"backup-once",expires_at:200})));
   render(<FamilySettings token="test-token"/>);
+  fireEvent.click(screen.getByText("Familiares"));
   await screen.findByText("Familiar · Respaldo");
   fireEvent.change(screen.getByLabelText("Recibir avisos como"),{target:{value:"backup"}});
   fireEvent.click(screen.getByRole("button",{name:"Vincular familiar"}));

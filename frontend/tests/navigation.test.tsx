@@ -29,7 +29,7 @@ it("el cuidador llega a zonas, conexión e historial; el QR no expone su token",
   expect(await screen.findByText("Sin zonas")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("link",{name:"Conexiones"}));
   await screen.findByRole("heading",{name:"Conexiones",level:1});
-  fireEvent.change(screen.getByLabelText("Dirección HTTPS de esta PC en la red"),{target:{value:"https://192.168.1.20:5175/#/phone"}});
+  fireEvent.change(screen.getByLabelText("Dirección de cámara"),{target:{value:"https://192.168.1.20:5175/#/phone"}});
   expect(screen.queryByAltText("QR para vincular la cámara del celular")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
   await screen.findByText("single-use-code");
@@ -105,7 +105,7 @@ it("cada generación cambia el QR y solo incluye el código temporal",async()=>{
   vi.mocked(fetch).mockImplementation(async(input,init)=>String(input).includes("/pairing/camera")
     ? new Response(JSON.stringify({code:`code-${++number}`,expires_at:Date.now()/1000+300})) : fallback(input,init));
   render(<FamilySettings token="private-admin"/>);
-  fireEvent.change(screen.getByLabelText("Dirección HTTPS de esta PC en la red"),{target:{value:"https://192.168.1.20:5175/#/phone"}});
+  fireEvent.change(screen.getByLabelText("Dirección de cámara"),{target:{value:"https://192.168.1.20:5175/#/phone"}});
   fireEvent.click(screen.getByRole("button",{name:"Generar QR de cámara"}));
   await waitFor(()=>expect(QRCode.toDataURL).toHaveBeenCalledWith("https://192.168.1.20:5175/#/phone?code=code-1",expect.any(Object)));
   fireEvent.click(screen.getByRole("button",{name:"Generar nuevo QR"}));
