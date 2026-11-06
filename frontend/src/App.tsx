@@ -66,8 +66,15 @@ function Dashboard({ token }: { token: string }) {
 }
 
 const SCREENS: Record<string, ComponentType<{token:string}>> = {
-  "#/camera":CameraSender, "#/zones":ZoneEditor, "#/family":FamilySettings, "#/events":EventHistory,
+  "#/zones":ZoneEditor, "#/family":FamilySettings, "#/events":EventHistory,
 };
+
+function PersistentCamera({token,active}:{token:string;active:boolean}) {
+  const [visited,setVisited]=useState(active);
+  useEffect(()=>{if(active)setVisited(true);},[active]);
+  // Navigation hides the controls; only ending the session unmounts the camera owner.
+  return visited ? <div hidden={!active}><CameraSender token={token} active={active}/></div> : null;
+}
 
 export default function App() {
   const [token, setToken] = useState("");
@@ -132,6 +139,6 @@ export default function App() {
       <label className="field-label" htmlFor="app-token">Token de acceso</label>
       <input id="app-token" type="password" value={draft} onChange={(event) => setDraft(event.target.value)} required autoComplete="off"/>
       <button type="submit" className="button button-dark w-full" disabled={!draft.trim()}>Entrar</button></form></main>
-      : <Screen token={token}/>}
+      : <><PersistentCamera token={token} active={hash==="#/camera"}/>{hash!=="#/camera"&&<Screen token={token}/>}</>}
     </div></div></Tooltip.Provider>;
 }

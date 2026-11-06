@@ -18,7 +18,7 @@ function poseLabel(pose: PoseMsg | null, synthetic: boolean | undefined) {
   return synthetic ? "Pose sintética" : "Pose";
 }
 
-export default function CameraSender({ token }: { token: string }) {
+export default function CameraSender({ token, active: visible = true }: { token: string; active?: boolean }) {
   const [mode, setMode] = useState<CaptureMode>("camera");
   const [running, setRunning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export default function CameraSender({ token }: { token: string }) {
   const { cameras, names } = useCameras(token);
   // El servidor asigna cam-1 por defecto; solo se envía camera_id si se elige otra.
   const ingest = useWebSocket("/ws/ingest", token, undefined, running, cameraId === DEFAULT_CAMERA ? undefined : cameraId);
-  const monitor = useMonitor(token, running, cameraId);
+  const monitor = useMonitor(token, running && visible, cameraId);
   const fail = useCallback((message: string) => { setCameraError(message); setRunning(false); }, []);
   const { videoRef, captureRef, frames, resetFrames } = useCameraCapture(mode, running, ingest.send, fail, ingest.canSend);
   const { frame, pose, status, health, alerts } = monitor;
