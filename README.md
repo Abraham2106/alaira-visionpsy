@@ -36,7 +36,7 @@ Crea `backend/.env` a partir de `backend/.env.example` y asigna un `APP_TOKEN` a
 .\.venv\Scripts\python.exe scripts/run_local.py --mode real
 ```
 
-Abre **http://127.0.0.1:5175** e ingresa el `APP_TOKEN` configurado. El supervisor inicia frontend y backend, comprueba su salud y los detiene con `Ctrl+C`. El backend escucha únicamente en loopback. `--check` valida la configuración sin iniciar servicios; `--mode demo` usa poses sintéticas, sin analizar la imagen.
+Abre **http://127.0.0.1:5175** en la PC: entrarás automáticamente, sin escribir un token. El supervisor entrega la credencial interna solo a conexiones de esta computadora y del mismo origen; permanece en memoria y no se incluye en el bundle. Otros dispositivos deben vincular su cámara por código. El supervisor inicia frontend y backend, comprueba su salud y los detiene con `Ctrl+C`. El backend escucha únicamente en loopback. `--check` valida la configuración sin iniciar servicios; `--mode demo` usa poses sintéticas, sin analizar la imagen.
 
 La configuración está en `backend/config.yaml`; eventos, zonas y avisos se guardan en `data/visionpsy.sqlite3`. La retención predeterminada de eventos resueltos es de 7 días. No se graba video.
 

@@ -65,7 +65,7 @@ it("el monitor muestra un mosaico con una baldosa por cámara y la alerta compar
     "cam-2":{frame:null,pose:null,status:status("cam-2","critical")},
   }};
   render(<App/>);
-  fireEvent.change(screen.getByLabelText("Token de acceso"),{target:{value:"admin-test-only"}});
+  fireEvent.change(await screen.findByLabelText("Token de acceso"),{target:{value:"admin-test-only"}});
   fireEvent.click(screen.getByRole("button",{name:"Entrar"}));
   const hall=await screen.findByRole("figure",{name:"Cámara Pasillo"});
   expect(screen.getByRole("figure",{name:"Cámara Sala"})).not.toHaveClass("mosaic-tile-alert");
@@ -80,7 +80,7 @@ it("con una sola cámara el monitor conserva la vista única",async()=>{
   vi.mocked(fetch).mockImplementation(async()=>new Response(JSON.stringify([CAMERAS[0]])));
   monitor.state={...monitor.state,views:{"cam-1":{frame:null,pose:null,status:status("cam-1","ok")}}};
   render(<App/>);
-  fireEvent.change(screen.getByLabelText("Token de acceso"),{target:{value:"admin-test-only"}});
+  fireEvent.change(await screen.findByLabelText("Token de acceso"),{target:{value:"admin-test-only"}});
   fireEvent.click(screen.getByRole("button",{name:"Entrar"}));
   expect(await screen.findByText("En directo")).toBeInTheDocument();
   expect(screen.queryByRole("figure")).not.toBeInTheDocument();

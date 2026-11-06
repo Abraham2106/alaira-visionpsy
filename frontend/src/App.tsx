@@ -1,5 +1,5 @@
 // Monitor local, acceso por token de sesión y captura de la cámara de PC.
-import { useState, useSyncExternalStore, type ComponentType } from "react";
+import { useEffect, useState, useSyncExternalStore, type ComponentType } from "react";
 import { Activity, Video, LogOut, ChevronLeft, ShieldCheck, Radio, MapPin, Users, History } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import AlertBanner from "./components/AlertBanner";
@@ -73,6 +73,36 @@ export default function App() {
   const [token, setToken] = useState("");
   const [draft, setDraft] = useState("");
   const hash = useSyncExternalStore(subscribeHash, readHash);
+  const [access, setAccess] = useState<"loading" | "local" | "manual">("loading");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const phone = hash === "#/phone";
+  useEffect(() => {
+    if (phone) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/local-session", { method: "POST", cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error("Acceso remoto");
+        const session = await response.json() as { token?: string };
+        if (!session.token) throw new Error("Sesión local no disponible");
+        if (!controller.signal.aborted) { setToken(session.token); setAccess("local"); }
+      } catch {
+        if (!controller.signal.aborted) setAccess("manual");
+      }
+    })();
+    return () => controller.abort();
+  }, [phone]);
+
+  async function connect(event: React.FormEvent) {
+    event.preventDefault();
+    if (!draft.trim()) return;
+    setLoginError(null);
+    try {
+      const response = await fetch("/api/health", { headers: { Authorization: `Bearer ${draft.trim()}` } });
+      if (!response.ok) throw new Error(response.status === 401 ? "Token de acceso inválido." : "No se pudo conectar con la PC.");
+      setToken(draft.trim()); setDraft("");
+    } catch (error) { setLoginError(error instanceof Error ? error.message : "No se pudo conectar con la PC."); }
+  }
   if (hash === "#/phone") return <MobileCamera/>;
   const title = {"#/camera":"Cámara de PC","#/zones":"Zonas","#/family":"Conexiones","#/events":"Historial"}[hash] ?? "Monitor de actividad";
   const Screen=SCREENS[hash] ?? Dashboard;
@@ -86,7 +116,7 @@ export default function App() {
         <a className={hash === "#/events" ? "nav-item selected" : "nav-item"} href="#/events"><History size={17}/>Historial</a>
       </nav>
       <div className="sidebar-bottom"><span className="local-indicator"><ShieldCheck size={16}/>Red local</span>
-        {token && <button type="button" className="nav-item" onClick={() => setToken("")}><LogOut size={17}/>Salir</button>}
+        {token && <button type="button" className="nav-item" onClick={() => { setToken(""); setAccess("manual"); }}><LogOut size={17}/>Salir</button>}
         <span className="sidebar-note">Pose local · análisis visual pendiente</span>
       </div>
     </aside>
@@ -96,9 +126,10 @@ export default function App() {
       <div className="header-actions"><span className="today-pill">Hoy</span><span className="header-mode"><Radio size={14}/>Local</span></div>
     </header>
     <p className="safety-note" role="note"><strong>Prototipo no médico.</strong> Puede fallar; no sustituye una llamada de emergencia.</p>
-    {!token ? <main className="login-layout"><form className="panel login-panel" onSubmit={(event) => {
-      event.preventDefault(); if (!draft.trim()) return; setToken(draft.trim()); setDraft("");
-    }}><h2>Conectar</h2><label className="field-label" htmlFor="app-token">Token de acceso</label>
+    {!token && access === "loading" ? <main className="login-layout"><p role="status">Conectando con esta PC…</p></main> : !token ? <main className="login-layout"><form className="panel login-panel" onSubmit={connect}>
+      <h2>Conectar</h2><p className="small-note">En la PC abre el panel local para entrar automáticamente. Para vincular un celular, abre <a href="#/phone">Cámara del celular</a>.</p>
+      {loginError && <p className="error-box" role="alert">{loginError}</p>}
+      <label className="field-label" htmlFor="app-token">Token de acceso</label>
       <input id="app-token" type="password" value={draft} onChange={(event) => setDraft(event.target.value)} required autoComplete="off"/>
       <button type="submit" className="button button-dark w-full" disabled={!draft.trim()}>Entrar</button></form></main>
       : <Screen token={token}/>}
