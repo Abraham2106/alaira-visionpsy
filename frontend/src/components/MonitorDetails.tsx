@@ -11,10 +11,11 @@ export default function MonitorDetails({ title, status, streaming, health, activ
   const value = (key: string, unit = "") => streaming && data?.[key] != null ? `${data[key]}${unit}` : "—";
   return <section className={`terminal-hud terminal-${tone}`} aria-label="Telemetría de cámara">
     <details open>
-      <summary><span className="terminal-prompt" aria-hidden="true">›_</span><span>visionpsy / live</span><span className="terminal-link"><i/>{streaming ? "LIVE" : "OFFLINE"}</span></summary>
+      <summary><span className="terminal-prompt">visionpsy.local</span><span>camera --watch</span></summary>
       <div className="terminal-content">
-        <div className="terminal-state"><span>STATUS</span><strong>{evaluable ? String(data?.phase ?? status?.level ?? "—") : quality}</strong></div>
-        <p className="terminal-message" role="status">{title}</p>
+        <div className="terminal-session"><span className="terminal-link">[{streaming ? "live" : "offline"}]</span> cámara {status?.camera_id ?? "—"}</div>
+        <div className="terminal-state"><span>status:</span><strong>{evaluable ? String(data?.phase ?? status?.level ?? "—") : quality}</strong></div>
+        <p className="terminal-message" role="status">[{title}]</p>
         {status?.model_error && <p className="terminal-error">{status.model_error}</p>}
         <dl className="terminal-metrics">
           <div><dt>pose</dt><dd>{quality}</dd></div>
