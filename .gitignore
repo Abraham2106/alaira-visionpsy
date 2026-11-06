@@ -1,5 +1,7 @@
 # Excluye secretos, dependencias y artefactos locales de VisionPsy-Local.
 .env
+*.telegram.json
+.telegram-*
 .venv/
 .venv311/
 .venv312/

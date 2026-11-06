@@ -4,11 +4,12 @@ import { api } from "../config";
 import { DEFAULT_CAMERA } from "../frames";
 import { useCameras } from "../hooks/useCameras";
 import type { CameraInfo } from "../types";
+import TelegramSetup from "./TelegramSetup";
 
 interface Code {code:string;expires_at:number}
 interface Contact {chat_id:string;alias:string;active:number;role:"primary"|"backup"}
 interface Delivery {id:number;event_id:string;kind:string;status:string;attempts:number;error:string|null}
-interface Notices {enabled:boolean;error:string|null;deliveries:Delivery[]}
+interface Notices {enabled:boolean;bot_username?:string;error:string|null;deliveries:Delivery[]}
 
 export default function FamilySettings({token}:{token:string}) {
   const [contacts,setContacts]=useState<Contact[]>([]);
@@ -24,6 +25,8 @@ export default function FamilySettings({token}:{token:string}) {
     return next;
   });
   const [familyCode,setFamilyCode]=useState<Code|null>(null);
+  const [familyQr,setFamilyQr]=useState("");
+  const [testMessage,setTestMessage]=useState("");
   const [address,setAddress]=useState(`${location.origin}/#/phone`);
   const [bot,setBot]=useState("");
   const [familyRole,setFamilyRole]=useState<"primary"|"backup">("primary");
@@ -33,10 +36,28 @@ export default function FamilySettings({token}:{token:string}) {
   const requestVersion=useRef(0);
   useEffect(()=>()=>{requestVersion.current++;},[token]);
   const refresh=useCallback(async()=>{
-    try {const [people,delivery]=await Promise.all([api<Contact[]>("/contacts",token),api<Notices>("/notifications",token)]);setContacts(people);setNotices(delivery);}
+    try {const [people,delivery]=await Promise.all([api<Contact[]>("/contacts",token),api<Notices>("/notifications",token)]);setContacts(people);setNotices(delivery);if(delivery.bot_username)setBot(delivery.bot_username);}
     catch {setError("No se pudo consultar la vinculación.");}
   },[token]);
   useEffect(()=>{void refresh();},[refresh]);
+  useEffect(()=>{
+    if(!familyCode)return;
+    const timer=window.setInterval(()=>{if(!document.hidden)void refresh();},2500);
+    return ()=>window.clearInterval(timer);
+  },[familyCode,refresh]);
+  useEffect(()=>{
+    if(!familyCode)return;
+    const timer=window.setTimeout(()=>setFamilyCode(null),Math.max(0,familyCode.expires_at*1000-Date.now()));
+    return ()=>window.clearTimeout(timer);
+  },[familyCode]);
+  const validBot=/^[A-Za-z][A-Za-z0-9_]{4,31}bot$/i.test(bot);
+  const familyLink=familyCode&&validBot?`https://t.me/${bot}?start=${encodeURIComponent(familyCode.code)}`:"";
+  useEffect(()=>{
+    let cancelled=false;
+    setFamilyQr("");
+    if(familyLink)void QRCode.toDataURL(familyLink,{width:200,margin:2}).then(data=>{if(!cancelled)setFamilyQr(data);}).catch(()=>{});
+    return ()=>{cancelled=true;};
+  },[familyLink]);
   useEffect(()=>{
     const timer=window.setInterval(()=>{if(!document.hidden)void refreshCameras();},2000);
     return ()=>window.clearInterval(timer);
@@ -87,7 +108,13 @@ export default function FamilySettings({token}:{token:string}) {
       if(pairCamera===id){setPairCamera(DEFAULT_CAMERA);setQr("");}await refreshCameras();}
     catch {if(version===requestVersion.current)setError("No se pudo quitar la cámara.");}finally{if(version===requestVersion.current)setPending(false);}
   }
-  const validBot=/^[A-Za-z][A-Za-z0-9_]{4,31}bot$/i.test(bot);
+  async function sendTest(chatId:string) {
+    const version=++requestVersion.current;
+    setPending(true);setError(null);setTestMessage("");
+    try {await api(`/telegram/test/${encodeURIComponent(chatId)}`,token,"POST");if(version===requestVersion.current)setTestMessage("Mensaje de prueba aceptado por Telegram. Revisa el chat del bot.");}
+    catch {if(version===requestVersion.current)setError("No se pudo enviar la prueba. Comprueba que el familiar inició el bot y no lo bloqueó.");}
+    finally {if(version===requestVersion.current)setPending(false);}
+  }
   return <main className="settings-grid">
     {error&&<p className="error-box" role="alert">{error}</p>}
     <section className="panel settings-panel"><div className="panel-heading"><h2>Cámaras de la habitación</h2></div><div className="settings-body">
@@ -109,13 +136,17 @@ export default function FamilySettings({token}:{token:string}) {
     </div></section>
     <details className="panel settings-panel family-settings"><summary className="panel-heading"><h2>Familiares</h2><span className="disclosure-chevron" aria-hidden="true">⌄</span></summary><div className="settings-body">
       <div className="family-toolbar"><span className="small-note">{notices?.enabled ? "Telegram activo" : "Telegram sin configurar"}</span><button type="button" className="button button-quiet" onClick={()=>void refresh()}>Actualizar</button></div>
-      <label htmlFor="bot-name">Usuario del bot</label><input id="bot-name" value={bot} onChange={e=>setBot(e.target.value.replace(/^@/,""))} placeholder="MiVisionPsyBot"/>
+      <TelegramSetup token={token} enabled={Boolean(notices?.enabled)} username={notices?.bot_username} onChange={async()=>{setFamilyCode(null);setBot("");await refresh();}}/>
+      {notices?.enabled&&!notices.bot_username&&<><label htmlFor="bot-name">Usuario del bot</label><input id="bot-name" value={bot} onChange={e=>setBot(e.target.value.replace(/^@/,""))} placeholder="MiVisionPsyBot"/></>}
       <label htmlFor="family-role">Recibir avisos como</label><select id="family-role" name="family-role" value={familyRole} disabled={pending} onChange={e=>{setFamilyRole(e.target.value as "primary"|"backup");setFamilyCode(null);}}><option value="primary">Contacto principal</option><option value="backup">Contacto de respaldo</option></select>
-      <button type="button" className="button button-dark" disabled={pending} onClick={()=>void issue(familyRole==="backup"?"telegram_backup":"telegram")}>Vincular familiar</button>
-      {familyCode&&<div><p>En el chat privado del bot, envía:</p><code className="pairing-code">/start {familyCode.code}</code>
-        {validBot&&<a className="button button-outline" href={`https://t.me/${bot}?start=${encodeURIComponent(familyCode.code)}`} target="_blank" rel="noreferrer">Abrir Telegram</a>}
+      <button type="button" className="button button-dark" disabled={pending||!notices?.enabled} onClick={()=>void issue(familyRole==="backup"?"telegram_backup":"telegram")}>Vincular familiar</button>
+      {familyCode&&<div>{familyQr&&<img className="pairing-qr" src={familyQr} alt="QR para vincular al familiar en Telegram"/>}
+        {familyLink&&<a className="button button-outline" href={familyLink} target="_blank" rel="noreferrer">Abrir Telegram</a>}
+        <p>Abre el enlace o escanea el QR y pulsa Iniciar en Telegram.</p>
+        <details><summary>Código manual</summary><code className="pairing-code">/start {familyCode.code}</code></details>
         <p className="small-note">Código temporal. El familiar recibirá datos del evento por Telegram; no se envían imágenes.</p></div>}
-      <ul className="settings-list">{contacts.filter(c=>c.active).map(c=><li key={c.chat_id}><span>{c.alias} · {c.role==="backup"?"Respaldo":"Principal"}</span><button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/contacts/${encodeURIComponent(c.chat_id)}`)}>Desvincular</button></li>)}</ul>
+      <ul className="settings-list">{contacts.filter(c=>c.active).map(c=><li key={c.chat_id}><span>{c.alias} · {c.role==="backup"?"Respaldo":"Principal"}</span><button type="button" className="button button-outline" disabled={pending||!notices?.enabled} onClick={()=>void sendTest(c.chat_id)}>Enviar prueba</button><button type="button" className="button button-outline" disabled={pending} onClick={()=>void remove(`/contacts/${encodeURIComponent(c.chat_id)}`)}>Desvincular</button></li>)}</ul>
+      {testMessage&&<p className="small-note" role="status">{testMessage}</p>}
       {notices?.error&&<p className="error-box" role="alert">{notices.error}</p>}
       {Boolean(notices?.deliveries.length)&&<><h3>Últimos avisos</h3><ul className="settings-list">{notices?.deliveries.map(d=><li key={d.id}><span>Evento {d.event_id.slice(0,8)} · {d.status==="sent"?"Aceptado por Telegram":d.status==="pending"?"Pendiente":d.status==="failed"?"Falló":"Cancelado"} · {d.attempts} intentos</span>{d.error&&<span>{d.error}</span>}</li>)}</ul></>}
     </div></details>

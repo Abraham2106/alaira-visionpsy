@@ -15,8 +15,8 @@ beforeEach(()=>{location.hash="";vi.stubGlobal("fetch",vi.fn());});
 it("vincula un respaldo con un código de alcance propio",async()=>{
   vi.mocked(fetch).mockImplementation(async(input)=>new Response(JSON.stringify(
     String(input).includes("/contacts") ? [{chat_id:"2",alias:"Familiar",role:"backup",active:1}]:
-    String(input).includes("/notifications") ? {enabled:false,error:null,deliveries:[]}:
-    {code:"backup-once",expires_at:200})));
+    String(input).includes("/notifications") ? {enabled:true,error:null,deliveries:[]}:
+    {code:"backup-once",expires_at:Date.now()/1000+300})));
   render(<FamilySettings token="test-token"/>);
   fireEvent.click(screen.getByText("Familiares"));
   await screen.findByText("Familiar · Respaldo");

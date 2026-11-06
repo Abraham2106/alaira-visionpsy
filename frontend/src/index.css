@@ -155,6 +155,9 @@ input,select { width:100%; min-height:44px; padding:10px 13px; border:1px solid 
 .camera-controls { display:grid; gap:10px; padding:16px 18px 18px; }
 .camera-controls .field-label { margin:0; }
 .camera-controls .small-note,.camera-controls .consent-note { margin:0; }
+.telegram-setup { display:grid; gap:10px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+.telegram-setup .small-note { margin:0; }
+.telegram-setup a { text-decoration:underline; text-underline-offset:3px; }
 .preview-label { position:absolute; inset:0; background:var(--surface-soft); display:grid; place-items:center; font-size:14px; color:var(--muted); }
 .connection-line { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:15px 0; font-size:12px; color:var(--muted); }
 .connection-line > span:last-child { margin-left:auto; }

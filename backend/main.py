@@ -3,13 +3,17 @@ import asyncio
 import secrets
 import os
 import time
+from pathlib import Path
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, Request, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.responses import JSONResponse
 
 from .alert_lifecycle import AlertStore, IllegalTransition
 from .consolidator import RoomConsolidator
@@ -19,6 +23,8 @@ from .pipeline import Pipeline
 from .domain import EventAction, Zone, ZonesDocument
 from .storage import DEFAULT_CAMERA, Repository, RevisionConflict
 from .notifications import NotificationWorker
+from .notifications import TelegramError
+from .telegram_setup import TelegramSetup
 from .ws_handler import ConnectionManager, authenticate, handle_dashboard, handle_ingest
 
 
@@ -31,7 +37,8 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
     async def lifespan(app: FastAPI):
         current = settings
         app.state.settings = current
-        if current.notifications.enabled and not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
+        telegram_path = None if current.storage.path == ":memory:" else Path(current.storage.path).with_suffix(".telegram.json")
+        if current.notifications.enabled and not os.getenv("TELEGRAM_BOT_TOKEN", "").strip() and not (telegram_path and telegram_path.exists()):
             raise RuntimeError("notifications.enabled requiere TELEGRAM_BOT_TOKEN en el entorno local")
         async with AsyncExitStack() as resources:
             try:
@@ -87,9 +94,10 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
             app.state.build_pipeline, app.state.new_estimator, app.state.estimators = build_pipeline, new_estimator, estimators
             worker = NotificationWorker(repository, room, current.notifications, clock=clock)
             app.state.notifier = worker
-            notification_task = None
-            if current.notifications.enabled:
-                notification_task = asyncio.create_task(worker.run())
+            telegram = TelegramSetup(worker, repository, telegram_path,
+                                     os.getenv("TELEGRAM_BOT_TOKEN", "") if current.notifications.enabled else "")
+            app.state.telegram = telegram
+            await telegram.start()
 
             async def ticker():
                 maintenance_at = clock()
@@ -116,14 +124,17 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
                 yield
             finally:
                 task.cancel()
-                if notification_task:
-                    notification_task.cancel()
-                    await asyncio.gather(notification_task, return_exceptions=True)
+                await telegram.stop()
                 await asyncio.gather(task, return_exceptions=True)
                 for pipeline in tuple(pipelines.values()):
                     await pipeline.close()
 
     app = FastAPI(title="VisionPsy-Local", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path == "/telegram":
+            return JSONResponse(status_code=422, content={"detail":"Introduce un token válido de BotFather."})
+        return await request_validation_exception_handler(request, error)
     async def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
         expected = app.state.settings.token
         if credentials is None or not secrets.compare_digest(credentials.credentials.encode(), expected.encode()):
@@ -242,8 +253,44 @@ def create_app(settings: Settings | None = None, *, estimator=None, vision=None,
 
     @app.get("/notifications", dependencies=[Depends(require_token)])
     async def notifications():
-        return {"enabled":app.state.settings.notifications.enabled,"error":app.state.notifier.last_error,
+        return {"enabled":app.state.telegram.enabled,"bot_username":app.state.telegram.username,
+                "error":app.state.notifier.last_error,
                 "deliveries":app.state.repository.deliveries()}
+
+    class TelegramConnect(BaseModel):
+        token: SecretStr
+
+    @app.post("/telegram", dependencies=[Depends(require_token)])
+    async def connect_telegram(body: TelegramConnect):
+        try:
+            await app.state.telegram.connect(body.token.get_secret_value())
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from None
+        except TelegramError as error:
+            raise HTTPException(502, str(error)) from None
+        except OSError:
+            raise HTTPException(500, "No se pudo guardar la configuración local del bot.") from None
+        return {"enabled":True,"bot_username":app.state.telegram.username}
+
+    @app.delete("/telegram", dependencies=[Depends(require_token)])
+    async def disconnect_telegram():
+        try:
+            await app.state.telegram.disconnect()
+        except OSError:
+            raise HTTPException(500, "No se pudo guardar la configuración local del bot.") from None
+        return {"enabled":False}
+
+    @app.post("/telegram/test/{chat_id}", dependencies=[Depends(require_token)])
+    async def test_telegram(chat_id: str):
+        try:
+            await app.state.telegram.send_test(chat_id)
+        except KeyError:
+            raise HTTPException(404, "Familiar no vinculado") from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+        except TelegramError as error:
+            raise HTTPException(502, str(error)) from None
+        return {"ok":True}
 
     @app.get("/contacts", dependencies=[Depends(require_token)])
     async def contacts():

@@ -152,6 +152,16 @@ class Repository:
         with self.lock:
             return [dict(r) for r in self.db.execute("SELECT chat_id,alias,active,role FROM contacts ORDER BY rowid")]
 
+    def configure_telegram(self, bot_id):
+        with self.lock, self.db:
+            previous = self.db.execute("SELECT value FROM meta WHERE key='telegram_bot_id'").fetchone()
+            if previous is None or previous[0] != str(bot_id):
+                self.db.execute("UPDATE contacts SET active=0")
+                self.db.execute("UPDATE outbox SET status='cancelled' WHERE status='pending'")
+                self.db.execute("DELETE FROM codes WHERE purpose IN ('telegram','telegram_backup')")
+                self.db.execute("INSERT INTO meta VALUES('telegram_offset','0') ON CONFLICT(key) DO UPDATE SET value='0'")
+            self.db.execute("INSERT INTO meta VALUES('telegram_bot_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(bot_id),))
+
     def add_contact(self, chat_id, alias, role="primary"):
         if role not in {"primary", "backup"}:
             raise ValueError("Rol de contacto desconocido")

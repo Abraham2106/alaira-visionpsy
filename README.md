@@ -66,7 +66,7 @@ Una habitación puede tener varias cámaras (máximo `cameras.max` en `backend/c
 
 ### Telegram
 
-Guarda `TELEGRAM_BOT_TOKEN` en `backend/.env` y activa `notifications.enabled` en `backend/config.yaml`. Reinicia el servidor. En **Conexiones**, ingresa el usuario del bot y genera un código para el contacto principal o de respaldo. Cada familiar debe iniciar la conversación privada con ese código.
+En **Conexiones → Familiares**, pega el token de BotFather y pulsa **Conectar bot**. Se valida con Telegram y se guarda localmente junto a SQLite, en un archivo `*.telegram.json` excluido de Git; la API no devuelve el token. No hace falta reiniciar. Luego pulsa **Vincular familiar**, abre el enlace o escanea el QR y pulsa **Iniciar** en Telegram. **Enviar prueba** manda un mensaje de prueba al familiar elegido. Puedes desconectar el bot desde la misma pantalla; cambiar a otro bot requiere volver a vincular a los familiares. La configuración anterior por `TELEGRAM_BOT_TOKEN` y `notifications.enabled` sigue siendo compatible.
 
 El principal recibe el aviso inicial; si nadie atiende, tras `notifications.reminder_seconds` recibe un recordatorio y se avisa al respaldo. Los botones **Estoy atendiendo** y **Descartar** actualizan el mismo evento. El polling es saliente: no necesita un webhook ni publicar el backend. “Aceptado por Telegram” no acredita lectura ni ayuda recibida. Un timeout puede dejar incertidumbre de entrega y causar repetición al reintentar.
 
