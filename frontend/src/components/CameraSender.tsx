@@ -28,7 +28,7 @@ export default function CameraSender({ token }: { token: string }) {
   const ingest = useWebSocket("/ws/ingest", token, undefined, running, cameraId === DEFAULT_CAMERA ? undefined : cameraId);
   const monitor = useMonitor(token, running, cameraId);
   const fail = useCallback((message: string) => { setCameraError(message); setRunning(false); }, []);
-  const { videoRef, captureRef, frames, resetFrames } = useCameraCapture(mode, running, ingest.send, fail);
+  const { videoRef, captureRef, frames, resetFrames } = useCameraCapture(mode, running, ingest.send, fail, ingest.canSend);
   const { frame, pose, status, health, alerts } = monitor;
   const streaming = monitor.connected && status?.camera === "streaming";
   const active = alerts.filter((alert) => alert.state !== "RESOLVED").length;
@@ -65,7 +65,7 @@ export default function CameraSender({ token }: { token: string }) {
             <option value="camera">Cámara de la computadora</option><option value="demo">Demo sintética</option>
           </select>
           <button type="button" className={`button w-full ${running ? "button-outline" : "button-dark"}`} onClick={toggleCapture}>{buttonText}</button>
-          <p className="small-note">{CAPTURE.fps} FPS · JPEG · Sin audio · Sin grabación continua</p>
+          <p className="small-note">Hasta {CAPTURE.fps} FPS · JPEG · Sin audio · Sin grabación continua</p>
           <p className="consent-note">Inicia la cámara con el consentimiento de la persona supervisada.</p>
         </div>
       </section>

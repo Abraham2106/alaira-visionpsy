@@ -1,5 +1,5 @@
 // URLs del mismo origen: el proxy local evita puertos y tokens incrustados en el navegador.
-export const CAPTURE = { fps: 5, maxWidth: 960, quality: 0.7, maxBufferedBytes: 2_000_000 };
+export const CAPTURE = { fps: 24, maxWidth: 800, quality: 0.65, maxBufferedBytes: 2_000_000 };
 
 export function wsUrl(path: "/ws/dashboard" | "/ws/ingest"): string {
   const url = new URL(path, location.origin);

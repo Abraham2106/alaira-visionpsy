@@ -22,7 +22,7 @@ export default function MobileCamera() {
   const [error,setError]=useState<string|null>(null);
   const ingest=useWebSocket("/ws/ingest",token,undefined,running&&Boolean(token));
   const fail=useCallback((message:string)=>{setError(message);setRunning(false);},[]);
-  const {videoRef,captureRef,frames,resetFrames}=useCameraCapture("camera",running,ingest.send,fail);
+  const {videoRef,captureRef,frames,resetFrames}=useCameraCapture("camera",running,ingest.send,fail,ingest.canSend);
   useEffect(()=>{
     const scanned=()=>{const next=readCode();if(next)setQrCode(next);};
     window.addEventListener("hashchange",scanned);

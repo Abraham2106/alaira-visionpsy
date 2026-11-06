@@ -59,16 +59,20 @@ export function useWebSocket(path: "/ws/dashboard" | "/ws/ingest", token: string
     };
   }, [path, token, enabled, retry, cameraId]);
 
-  const send = useCallback((data: Blob) => {
+  const canSend = useCallback(() => {
     const ws = socket.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > CAPTURE.maxBufferedBytes) return false;
     if(path === "/ws/ingest" && inFlight.current) {
       if(Date.now()-inFlight.current>4000) ws.close();
       return false;
     }
-    ws.send(data);
-    if(path === "/ws/ingest") inFlight.current = Date.now();
     return true;
   }, [path]);
-  return { connected, error, send };
+  const send = useCallback((data: Blob) => {
+    if (!canSend()) return false;
+    socket.current!.send(data);
+    if(path === "/ws/ingest") inFlight.current = Date.now();
+    return true;
+  }, [canSend, path]);
+  return { connected, error, send, canSend };
 }
