@@ -83,6 +83,7 @@ export default function App() {
   const hash = useSyncExternalStore(subscribeHash, readHash);
   const [access, setAccess] = useState<"loading" | "local" | "manual">("loading");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const phone = hash === "#/phone";
   useEffect(() => {
     if (phone) return;
@@ -99,7 +100,7 @@ export default function App() {
       }
     })();
     return () => controller.abort();
-  }, [phone]);
+  }, [phone, sessionAttempt]);
 
   async function connect(event: React.FormEvent) {
     event.preventDefault();
@@ -124,7 +125,7 @@ export default function App() {
         <a className={hash === "#/events" ? "nav-item selected" : "nav-item"} href="#/events"><History size={17}/>Historial</a>
       </nav>
       <div className="sidebar-bottom"><span className="local-indicator"><ShieldCheck size={16}/>Red local</span>
-        {token && <button type="button" className="nav-item" onClick={() => { setToken(""); setAccess("manual"); }}><LogOut size={17}/>Salir</button>}
+        {token && <button type="button" className="nav-item" onClick={() => { setToken(""); setDraft(""); setLoginError(null); }}><LogOut size={17}/>Salir</button>}
         <span className="sidebar-note">Pose local · análisis visual pendiente</span>
       </div>
     </aside>
@@ -133,7 +134,9 @@ export default function App() {
       <h1>{title}</h1></div>
       <div className="header-actions"><span className="today-pill">Hoy</span><span className="header-mode"><Radio size={14}/>Local</span></div>
     </header>
-    {!token && access === "loading" ? <main className="login-layout"><p role="status">Conectando con esta PC…</p></main> : !token ? <main className="login-layout"><form className="panel login-panel" onSubmit={connect}>
+    {!token && access === "loading" ? <main className="login-layout"><p role="status">Conectando con esta PC…</p></main> : !token && access === "local" ? <main className="login-layout"><section className="panel login-panel">
+      <h2>Sesión cerrada</h2><button type="button" className="button button-dark w-full" onClick={() => { setAccess("loading"); setSessionAttempt(attempt => attempt + 1); }}>Volver a entrar</button>
+    </section></main> : !token ? <main className="login-layout"><form className="panel login-panel" onSubmit={connect}>
       <h2>Conectar</h2><p className="small-note">En la PC abre el panel local para entrar automáticamente. Para vincular un celular, abre <a href="#/phone">Cámara del celular</a>.</p>
       {loginError && <p className="error-box" role="alert">{loginError}</p>}
       <label className="field-label" htmlFor="app-token">Token de acceso</label>

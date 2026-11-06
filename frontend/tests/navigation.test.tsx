@@ -61,6 +61,15 @@ it("entra automáticamente en esta PC sin pedir ni guardar el token",async()=>{
   expect(screen.queryByLabelText("Token de acceso")).not.toBeInTheDocument();
   expect(localStorage.length).toBe(0);
   expect(sessionStorage.length).toBe(0);
+  const attempts = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/local-session")).length;
+  fireEvent.click(screen.getByRole("button", {name:"Salir"}));
+  expect(screen.queryByLabelText("Token de acceso")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name:"Salir"})).not.toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/local-session"))).toHaveLength(attempts);
+  fireEvent.click(screen.getByRole("button", {name:"Volver a entrar"}));
+  expect(await screen.findByRole("button", {name:"Salir"})).toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/local-session"))).toHaveLength(attempts + 1);
+  expect(screen.queryByLabelText("Token de acceso")).not.toBeInTheDocument();
 });
 
 it("no inicia sesión con un token manual rechazado por el backend",async()=>{
