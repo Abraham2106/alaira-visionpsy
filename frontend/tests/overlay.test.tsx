@@ -3,13 +3,26 @@ import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import VideoCanvas from "../src/components/VideoCanvas";
 import type {PoseMsg} from "../src/types";
 
-const context={drawImage:vi.fn(),beginPath:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),stroke:vi.fn(),arc:vi.fn(),fill:vi.fn(),strokeStyle:"",fillStyle:"",lineWidth:0};
+const context={drawImage:vi.fn(),clearRect:vi.fn(),beginPath:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),stroke:vi.fn(),arc:vi.fn(),fill:vi.fn(),strokeStyle:"",fillStyle:"",lineWidth:0};
 beforeEach(()=>{
   vi.clearAllMocks();
   vi.spyOn(HTMLCanvasElement.prototype,"getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
   vi.stubGlobal("createImageBitmap",vi.fn());
 });
 afterEach(()=>vi.unstubAllGlobals());
+
+it("no decodifica JPEGs para superponer la pose a la webcam y borra puntos al perderla",async()=>{
+  const video=document.createElement("video");
+  Object.defineProperties(video,{videoWidth:{value:800},videoHeight:{value:450}});
+  const frame=new Blob(["frame"]);
+  const source={current:video};
+  const view=render(<VideoCanvas frame={frame} pose={null} overlay videoSource={source}/>);
+  await waitFor(()=>expect(context.clearRect).toHaveBeenCalledWith(0,0,800,450));
+  expect(createImageBitmap).not.toHaveBeenCalled();
+  expect(context.drawImage).not.toHaveBeenCalled();
+  view.rerender(<VideoCanvas frame={new Blob(["next"])} pose={null} overlay videoSource={source}/>);
+  await waitFor(()=>expect(context.clearRect).toHaveBeenCalledTimes(2));
+});
 
 it("superpone la pose sin pintar un JPEG que tape el video directo",async()=>{
   const bitmap={width:800,height:600,close:vi.fn()};

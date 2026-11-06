@@ -51,7 +51,7 @@ export default function CameraSender({ token, active: visible = true }: { token:
         <div className="camera-preview">
           <video ref={videoRef} muted playsInline hidden={mode !== "camera"} />
           <canvas ref={captureRef} hidden={mode === "camera" || frame !== null} />
-          {frame && <VideoCanvas frame={frame} pose={pose} overlay={mode === "camera"} />}
+          {frame && <VideoCanvas frame={frame} pose={pose} overlay={mode === "camera"} videoSource={videoRef} />}
           {!running && <div className="preview-label">Captura detenida</div>}
           <MonitorDetails title={statusTitle} status={status} streaming={streaming} health={health} active={active}/>
         </div>
